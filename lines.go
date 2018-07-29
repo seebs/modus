@@ -1,6 +1,10 @@
 package main
 
 import (
+	"image"
+	"math"
+
+	"github.com/hajimehoshi/ebiten"
 )
 
 // A PolyLine represents a series of line segments, each
@@ -13,10 +17,83 @@ import (
 // that away and presenting a polyline interface is more
 // convenient.
 type PolyLine struct {
-	Points []LinePoint
+	Points    []LinePoint
+	image     *ebiten.Image
+	sr        *image.Rectangle
+	Thickness float64
+	Palette   *Palette
+	sx, sy    float64
+	w, h      float64
+	cw, ch    float64
 }
 
 type LinePoint struct {
-	X, Y int
-	P Paint
+	X, Y float64
+	P    Paint
+}
+
+func NewPolyLine(source *ebiten.Image, p *Palette) *PolyLine {
+	pl := &PolyLine{image: source, Palette: p}
+	if pl.image != nil {
+		// TODO: Don't hard-code this, also figure out how to specify
+		// the sourcerect cleanly.
+		pl.w, pl.h = 32, 32
+		pl.cw, pl.ch = pl.w/2, pl.h/2
+		pl.sx, pl.sy = 1/pl.w, 1/pl.h
+		pl.sr = &image.Rectangle{
+			Min: image.Point{X: 32, Y: 0},
+			Max: image.Point{X: 64, Y: 32},
+		}
+	}
+	return pl
+}
+
+// Draw renders the line on the target, using drawimage options modified by
+// color and location of line segments.
+func (pl PolyLine) Draw(target *ebiten.Image, op ebiten.DrawImageOptions) {
+	// can't draw without an image
+	if pl.image == nil {
+		return
+	}
+	thickness := pl.Thickness
+	// no invisible lines plz
+	if thickness == 0 {
+		thickness = 1.1
+	}
+	prev := pl.Points[0]
+	count := 0
+	op.SourceRect = pl.sr
+	op.Filter = ebiten.FilterLinear
+	for _, next := range pl.Points[1:] {
+		var g ebiten.GeoM
+		cx, cy := (prev.X+next.X)/2, (prev.Y+next.Y)/2
+		dx, dy := (next.X - prev.X), (next.Y - prev.Y)
+		l := math.Sqrt(dx*dx + dy*dy)
+		theta := math.Atan2(dy, dx)
+		g.Translate(-pl.cw, -pl.ch)
+		g.Scale(l*pl.sx, thickness*pl.sy)
+		g.Rotate(theta)
+		g.Translate(cx, cy)
+		op.GeoM = g
+		op.ColorM = pl.Palette.Color(next.P)
+		target.DrawImage(pl.image, &op)
+		prev = next
+		count++
+	}
+}
+
+func (pl PolyLine) Length() int {
+	return len(pl.Points)
+}
+
+func (pl PolyLine) Point(i int) *LinePoint {
+	if i < 0 || i >= len(pl.Points) {
+		return nil
+	}
+	return &pl.Points[i]
+}
+
+func (pl *PolyLine) Add(x, y float64, p Paint) {
+	pt := LinePoint{X: x, Y: y, P: p}
+	pl.Points = append(pl.Points, pt)
 }

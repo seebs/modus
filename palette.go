@@ -1,18 +1,18 @@
 package main
 
 import (
-	"fmt"
 	"image/color"
+
 	"github.com/hajimehoshi/ebiten"
 )
 
 type Paint struct {
 	palette *Palette
-	paint int
+	paint   int
 }
 
 type Palette struct {
-	raw []color.RGBA
+	raw    []color.RGBA
 	Paints []Paint
 	Colors []ebiten.ColorM
 }
@@ -48,11 +48,11 @@ func (p *Palette) Initialize() {
 }
 
 func (p Palette) Paint(idx int) Paint {
-	return p.Paints[idx % len(p.Paints)]
+	return p.Paints[idx%len(p.Paints)]
 }
 
 func (p Palette) Color(pt Paint) ebiten.ColorM {
-	return p.Colors[pt.paint % len(p.Paints)]
+	return p.Colors[pt.paint%len(p.Paints)]
 }
 
 func (p *Paint) Inc(n int) {

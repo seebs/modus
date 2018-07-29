@@ -1,10 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
+	"image"
 	_ "image/png"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"runtime/pprof"
@@ -24,7 +26,7 @@ const (
 type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
-	Palette *Palette
+	Palette       *Palette
 }
 
 func (g *Grid) RandRow() int {
@@ -98,12 +100,17 @@ func (g *Grid) Draw(screen *ebiten.Image) {
 }
 
 var (
-	square  *ebiten.Image
-	op      = &ebiten.DrawImageOptions{}
-	grid    Grid
-	knights []Loc
-	knight  int
+	square   *ebiten.Image
+	op       = &ebiten.DrawImageOptions{}
+	grid     Grid
+	line     *PolyLine
+	knights  []Loc
+	knight   int
 	timedOut <-chan time.Time
+	tx       = 640
+	ty       = 240
+	dtx      = 0
+	dty      = 1
 )
 
 var knightMoves = []Mov{
@@ -121,6 +128,37 @@ func knightMove() Mov {
 	return knightMoves[int(rand.Int31n(int32(len(knightMoves))))]
 }
 
+func spiralTo(pl *PolyLine, x, y int) {
+	cx, cy := float64(screenWidth)/2, float64(screenHeight)/2
+	dx, dy := float64(x)-cx, float64(y)-cy
+	baseTheta := math.Atan2(dy, dx)
+	baseR := math.Sqrt(dx*dx + dy*dy)
+	scaleR := 8 * math.Pi
+	l := len(pl.Points)
+	for i := 0; i < l; i++ {
+		pt := pl.Point(i)
+		s, c := math.Sincos(float64(i)/float64(l-1)*scaleR + baseTheta)
+		r := float64(i) / float64(l-1) * baseR
+		x, y := (c*r)+cx, (s*r)+cy
+		pt.X, pt.Y = x, y
+	}
+}
+
+func squareAt(screen *ebiten.Image, x, y int) {
+	op := ebiten.DrawImageOptions{
+		SourceRect: &image.Rectangle{
+			Min: image.Point{0, 0},
+			Max: image.Point{32, 32},
+		},
+	}
+	g := ebiten.GeoM{}
+	g.Translate(-16, -16)
+	g.Scale(0.5, 0.5)
+	g.Translate(float64(x), float64(y))
+	op.GeoM = g
+	screen.DrawImage(square, &op)
+}
+
 func update(screen *ebiten.Image) error {
 	k := &knights[knight]
 	*k = grid.Add(*k, knightMove())
@@ -129,9 +167,60 @@ func update(screen *ebiten.Image) error {
 		p.Inc(1)
 	})
 	knight = (knight + 1) % len(knights)
-	grid.Draw(screen)
+	// grid.Draw(screen)
+	op := ebiten.DrawImageOptions{
+		SourceRect: &image.Rectangle{
+			Min: image.Point{0, 0},
+			Max: image.Point{32, 32},
+		},
+	}
+
+	for i := 0; i < 6; i++ {
+		for j := 0; j < 4; j++ {
+			g := ebiten.GeoM{}
+			g.Translate(-16, -16)
+			g.Scale(2, 2)
+			g.Rotate(float64(j) * math.Pi / 8)
+			g.Translate(64*float64(i)+32, 64*float64(j)+32)
+			op.GeoM = g
+			screen.DrawImage(square, &op)
+		}
+	}
+	change := false
+	ty += dty * 3
+	if ty > screenHeight {
+		ty = screenHeight
+		dty = 0
+		dtx = -1
+		change = true
+	}
+	if ty < 0 {
+		ty = 0
+		dty = 0
+		dtx = 1
+		change = true
+	}
+	tx += dtx * 3
+	if tx > screenWidth {
+		tx = screenWidth
+		dtx = 0
+		dty = 1
+		change = true
+	}
+	if tx < 0 {
+		tx = 0
+		dtx = 0
+		dty = -1
+		change = true
+	}
+	if change {
+		fmt.Printf("squareAt %d,%d\n", tx, ty)
+	}
+	spiralTo(line, tx, ty)
+	squareAt(screen, tx, ty)
+	line.Draw(screen, ebiten.DrawImageOptions{})
 	select {
-	case <- timedOut:
+	case <-timedOut:
 		return errors.New("regular termination")
 	default:
 		return nil
@@ -159,11 +248,16 @@ func main() {
 	for i := 0; i < 6; i++ {
 		knights = append(knights, grid.NewLoc())
 	}
-	square, _, err = ebitenutil.NewImageFromFile("square.png", ebiten.FilterNearest)
+	square, _, err = ebitenutil.NewImageFromFile("square.png", ebiten.FilterLinear)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Lights Out?"); err != nil {
+	line = NewPolyLine(square, Palettes["rainbow"])
+	for i := 0; i < 600; i++ {
+		line.Add(0, 0, line.Palette.Paint(i))
+	}
+	spiralTo(line, tx, ty)
+	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Lights Out?"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }
