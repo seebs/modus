@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"errors"
-	"image/color"
 	_ "image/png"
 	"log"
 	"math/rand"
@@ -22,38 +21,10 @@ const (
 	screenHeight = 480
 )
 
-type Paint int
-
-var rawPalette = []color.RGBA{
-	color.RGBA{255, 0, 0, 255},
-	color.RGBA{240, 90, 0, 255},
-	color.RGBA{220, 220, 0, 255},
-	color.RGBA{0, 200, 0, 255},
-	color.RGBA{0, 0, 255, 255},
-	color.RGBA{180, 0, 200, 255},
-}
-
-func initPalette() {
-	for _, c := range rawPalette {
-		cm := &ebiten.ColorM{}
-		cm.Scale(float64(c.R)/255, float64(c.G)/255, float64(c.B)/255, 1.0)
-		palette = append(palette, cm)
-	}
-}
-
-var palette []*ebiten.ColorM
-
-func (p Paint) Color() *ebiten.ColorM {
-	return palette[int(p)%len(palette)]
-}
-
-func (p *Paint) Inc(n int) {
-	*p = Paint((int(*p) + n) % len(palette))
-}
-
 type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
+	Palette *Palette
 }
 
 func (g *Grid) RandRow() int {
@@ -121,7 +92,7 @@ func (g *Grid) Draw(screen *ebiten.Image) {
 	grid.Iterate(func(g *Grid, l Loc, _ *Paint) {
 		op.GeoM.Reset()
 		op.GeoM.Translate(float64(l.X*xscale), float64(l.Y*yscale))
-		op.ColorM = *g.Squares[l.X][l.Y].Color()
+		op.ColorM = g.Palette.Color(g.Squares[l.X][l.Y])
 		screen.DrawImage(square, op)
 	})
 }
@@ -180,10 +151,10 @@ func main() {
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
-	initPalette()
 	grid = NewGrid(80, 60)
+	grid.Palette = Palettes["rainbow"]
 	grid.Iterate(func(g *Grid, l Loc, p *Paint) {
-		g.Squares[l.X][l.Y] = Paint(0)
+		g.Squares[l.X][l.Y] = g.Palette.Paint(0)
 	})
 	for i := 0; i < 6; i++ {
 		knights = append(knights, grid.NewLoc())
