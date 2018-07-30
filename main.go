@@ -103,7 +103,7 @@ var (
 	square   *ebiten.Image
 	op       = &ebiten.DrawImageOptions{}
 	grid     Grid
-	line     *PolyLine
+	lines    []*PolyLine
 	knights  []Loc
 	knight   int
 	timedOut <-chan time.Time
@@ -186,39 +186,38 @@ func update(screen *ebiten.Image) error {
 			screen.DrawImage(square, &op)
 		}
 	}
-	change := false
-	ty += dty * 3
+	ty += dty * 8
 	if ty > screenHeight {
 		ty = screenHeight
 		dty = 0
 		dtx = -1
-		change = true
 	}
 	if ty < 0 {
 		ty = 0
 		dty = 0
 		dtx = 1
-		change = true
 	}
-	tx += dtx * 3
+	tx += dtx * 8
 	if tx > screenWidth {
 		tx = screenWidth
 		dtx = 0
 		dty = 1
-		change = true
 	}
 	if tx < 0 {
 		tx = 0
 		dtx = 0
 		dty = -1
-		change = true
 	}
-	if change {
-		fmt.Printf("squareAt %d,%d\n", tx, ty)
+	line := lines[0]
+	for i := 0; i < len(lines)-1; i++ {
+		lines[i] = lines[i+1]
 	}
+	lines[len(lines) - 1] = line
 	spiralTo(line, tx, ty)
 	squareAt(screen, tx, ty)
-	line.Draw(screen, ebiten.DrawImageOptions{})
+	for i, line := range lines {
+		line.Draw(screen, (float64(i) + 1) / 6)
+	}
 	select {
 	case <-timedOut:
 		return errors.New("regular termination")
@@ -252,12 +251,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	line = NewPolyLine(square, Palettes["rainbow"])
-	for i := 0; i < 600; i++ {
-		line.Add(0, 0, line.Palette.Paint(i))
+	lines = make([]*PolyLine, 0, 6)
+	for i := 0; i < 6; i++ {
+		line := NewPolyLine(square, Palettes["rainbow"])
+		for j := 0; j < 600; j++ {
+			line.Add(0, 0, line.Palette.Paint(j+i))
+		}
+		spiralTo(line, tx, ty + (i * 3))
+		lines = append(lines, line)
 	}
-	spiralTo(line, tx, ty)
-	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Lights Out?"); err != nil {
+	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Lights Out?"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }

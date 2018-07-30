@@ -50,7 +50,7 @@ func NewPolyLine(source *ebiten.Image, p *Palette) *PolyLine {
 
 // Draw renders the line on the target, using drawimage options modified by
 // color and location of line segments.
-func (pl PolyLine) Draw(target *ebiten.Image, op ebiten.DrawImageOptions) {
+func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	// can't draw without an image
 	if pl.image == nil {
 		return
@@ -58,10 +58,11 @@ func (pl PolyLine) Draw(target *ebiten.Image, op ebiten.DrawImageOptions) {
 	thickness := pl.Thickness
 	// no invisible lines plz
 	if thickness == 0 {
-		thickness = 1.1
+		thickness = 0.7
 	}
 	prev := pl.Points[0]
 	count := 0
+	op := ebiten.DrawImageOptions{}
 	op.SourceRect = pl.sr
 	op.Filter = ebiten.FilterLinear
 	for _, next := range pl.Points[1:] {
@@ -71,11 +72,18 @@ func (pl PolyLine) Draw(target *ebiten.Image, op ebiten.DrawImageOptions) {
 		l := math.Sqrt(dx*dx + dy*dy)
 		theta := math.Atan2(dy, dx)
 		g.Translate(-pl.cw, -pl.ch)
+		g2 := g
 		g.Scale(l*pl.sx, thickness*pl.sy)
+		g2.Scale(l*pl.sx, (thickness+0.5)*pl.sy)
 		g.Rotate(theta)
+		g2.Rotate(theta)
 		g.Translate(cx, cy)
-		op.GeoM = g
+		g2.Translate(cx, cy)
 		op.ColorM = pl.Palette.Color(next.P)
+		op.ColorM.Scale(1, 1, 1, 0.5 * alpha)
+		op.GeoM = g
+		target.DrawImage(pl.image, &op)
+		op.GeoM = g2
 		target.DrawImage(pl.image, &op)
 		prev = next
 		count++
