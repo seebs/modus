@@ -1,7 +1,6 @@
 package main
 
 import (
-	"image"
 	"math"
 
 	"github.com/hajimehoshi/ebiten"
@@ -18,13 +17,10 @@ import (
 // convenient.
 type PolyLine struct {
 	Points    []LinePoint
-	image     *ebiten.Image
-	sr        *image.Rectangle
+	sp        *Sprite
 	Thickness float64
 	Palette   *Palette
 	sx, sy    float64
-	w, h      float64
-	cw, ch    float64
 }
 
 type LinePoint struct {
@@ -32,19 +28,8 @@ type LinePoint struct {
 	P    Paint
 }
 
-func NewPolyLine(source *ebiten.Image, p *Palette) *PolyLine {
-	pl := &PolyLine{image: source, Palette: p}
-	if pl.image != nil {
-		// TODO: Don't hard-code this, also figure out how to specify
-		// the sourcerect cleanly.
-		pl.w, pl.h = 32, 32
-		pl.cw, pl.ch = pl.w/2, pl.h/2
-		pl.sx, pl.sy = 1/pl.w, 1/pl.h
-		pl.sr = &image.Rectangle{
-			Min: image.Point{X: 32, Y: 0},
-			Max: image.Point{X: 64, Y: 32},
-		}
-	}
+func NewPolyLine(sp *Sprite, p *Palette) *PolyLine {
+	pl := &PolyLine{sp: sp, Palette: p}
 	return pl
 }
 
@@ -52,7 +37,7 @@ func NewPolyLine(source *ebiten.Image, p *Palette) *PolyLine {
 // color and location of line segments.
 func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	// can't draw without an image
-	if pl.image == nil {
+	if pl.sp == nil {
 		return
 	}
 	thickness := pl.Thickness
@@ -62,29 +47,28 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	}
 	prev := pl.Points[0]
 	count := 0
-	op := ebiten.DrawImageOptions{}
-	op.SourceRect = pl.sr
+	op := pl.sp.Op
 	op.Filter = ebiten.FilterLinear
+	baseG := op.GeoM
 	for _, next := range pl.Points[1:] {
-		var g ebiten.GeoM
 		cx, cy := (prev.X+next.X)/2, (prev.Y+next.Y)/2
 		dx, dy := (next.X - prev.X), (next.Y - prev.Y)
 		l := math.Sqrt(dx*dx + dy*dy)
 		theta := math.Atan2(dy, dx)
-		g.Translate(-pl.cw, -pl.ch)
-		g2 := g
-		g.Scale(l*pl.sx, thickness*pl.sy)
-		g2.Scale(l*pl.sx, (thickness+0.5)*pl.sy)
+		g := baseG
+		g2 := baseG
+		g.Scale(l, thickness)
+		g2.Scale(l, (thickness + 0.5))
 		g.Rotate(theta)
 		g2.Rotate(theta)
 		g.Translate(cx, cy)
 		g2.Translate(cx, cy)
 		op.ColorM = pl.Palette.Color(next.P)
-		op.ColorM.Scale(1, 1, 1, 0.5 * alpha)
+		op.ColorM.Scale(1, 1, 1, 0.5*alpha)
 		op.GeoM = g
-		target.DrawImage(pl.image, &op)
+		target.DrawImage(pl.sp.Image, &op)
 		op.GeoM = g2
-		target.DrawImage(pl.image, &op)
+		target.DrawImage(pl.sp.Image, &op)
 		prev = next
 		count++
 	}

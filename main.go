@@ -23,6 +23,11 @@ const (
 	screenHeight = 480
 )
 
+type Renderable interface {
+	Update()
+	Draw(*ebiten.Image)
+}
+
 type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
@@ -78,6 +83,11 @@ func (g *Grid) Iterate(fn GridFunc) {
 
 func (g *Grid) At(l Loc) *Paint {
 	return &g.Squares[l.X][l.Y]
+}
+
+func (g *Grid) Inc(l Loc, n int) {
+	pt := &g.Squares[l.X][l.Y]
+	*pt = g.Palette.Inc(*pt, n)
 }
 
 // Neighbors runs fn on the nearby cells.
@@ -160,11 +170,14 @@ func squareAt(screen *ebiten.Image, x, y int) {
 }
 
 func update(screen *ebiten.Image) error {
+	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+		return errors.New("quit requested")
+	}
 	k := &knights[knight]
 	*k = grid.Add(*k, knightMove())
-	grid.Squares[k.X][k.Y].Inc(2)
+	grid.Inc(*k, 2)
 	grid.Neighbors(*k, func(g *Grid, l Loc, p *Paint) {
-		p.Inc(1)
+		g.Inc(l, 1)
 	})
 	knight = (knight + 1) % len(knights)
 	// grid.Draw(screen)
@@ -212,11 +225,11 @@ func update(screen *ebiten.Image) error {
 	for i := 0; i < len(lines)-1; i++ {
 		lines[i] = lines[i+1]
 	}
-	lines[len(lines) - 1] = line
+	lines[len(lines)-1] = line
 	spiralTo(line, tx, ty)
 	squareAt(screen, tx, ty)
 	for i, line := range lines {
-		line.Draw(screen, (float64(i) + 1) / 6)
+		line.Draw(screen, (float64(i)+1)/6)
 	}
 	select {
 	case <-timedOut:
@@ -251,13 +264,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
+	NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
 	lines = make([]*PolyLine, 0, 6)
 	for i := 0; i < 6; i++ {
-		line := NewPolyLine(square, Palettes["rainbow"])
+		line := NewPolyLine(Sprites["white"], Palettes["rainbow"])
 		for j := 0; j < 600; j++ {
 			line.Add(0, 0, line.Palette.Paint(j+i))
 		}
-		spiralTo(line, tx, ty + (i * 3))
+		spiralTo(line, tx, ty+(i*3))
 		lines = append(lines, line)
 	}
 	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Lights Out?"); err != nil {

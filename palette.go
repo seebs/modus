@@ -6,15 +6,12 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
-type Paint struct {
-	palette *Palette
-	paint   int
-}
+type Paint int
 
 type Palette struct {
 	raw    []color.RGBA
-	Paints []Paint
 	Colors []ebiten.ColorM
+	Length int
 }
 
 var Palettes = map[string]*Palette{
@@ -37,28 +34,23 @@ func init() {
 }
 
 func (p *Palette) Initialize() {
-	p.Paints = make([]Paint, 0, len(p.raw))
-	p.Colors = make([]ebiten.ColorM, 0, len(p.raw))
-	for idx, c := range p.raw {
+	p.Length = len(p.raw)
+	p.Colors = make([]ebiten.ColorM, 0, p.Length)
+	for _, c := range p.raw {
 		cm := ebiten.ColorM{}
 		cm.Scale(float64(c.R)/255, float64(c.G)/255, float64(c.B)/255, 1.0)
 		p.Colors = append(p.Colors, cm)
-		p.Paints = append(p.Paints, Paint{palette: p, paint: idx})
 	}
 }
 
 func (p Palette) Paint(idx int) Paint {
-	return p.Paints[idx%len(p.Paints)]
+	return Paint(idx % p.Length)
 }
 
 func (p Palette) Color(pt Paint) ebiten.ColorM {
-	return p.Colors[pt.paint%len(p.Paints)]
+	return p.Colors[int(pt)%p.Length]
 }
 
-func (p *Paint) Inc(n int) {
-	p.paint = (p.paint + n) % len(p.palette.Paints)
-}
-
-func (p *Paint) Set(n int) {
-	p.paint = n % len(p.palette.Paints)
+func (p Palette) Inc(pt Paint, n int) Paint {
+	return Paint((int(pt) + n) % p.Length)
 }
