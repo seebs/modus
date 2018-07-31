@@ -23,11 +23,14 @@ const (
 	screenHeight = 480
 )
 
+// A Renderable is a thing, like a spiral or a grid, which has
+// logic for drawing itself on, for instance, a screen.
 type Renderable interface {
 	Update()
 	Draw(*ebiten.Image)
 }
 
+// Grid represents a grid of squares.
 type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
@@ -113,7 +116,7 @@ var (
 	square   *ebiten.Image
 	op       = &ebiten.DrawImageOptions{}
 	grid     Grid
-	lines    []*PolyLine
+	spiral   *Spiral
 	knights  []Loc
 	knight   int
 	timedOut <-chan time.Time
@@ -136,22 +139,6 @@ var knightMoves = []Mov{
 
 func knightMove() Mov {
 	return knightMoves[int(rand.Int31n(int32(len(knightMoves))))]
-}
-
-func spiralTo(pl *PolyLine, x, y int) {
-	cx, cy := float64(screenWidth)/2, float64(screenHeight)/2
-	dx, dy := float64(x)-cx, float64(y)-cy
-	baseTheta := math.Atan2(dy, dx)
-	baseR := math.Sqrt(dx*dx + dy*dy)
-	scaleR := 8 * math.Pi
-	l := len(pl.Points)
-	for i := 0; i < l; i++ {
-		pt := pl.Point(i)
-		s, c := math.Sincos(float64(i)/float64(l-1)*scaleR + baseTheta)
-		r := float64(i) / float64(l-1) * baseR
-		x, y := (c*r)+cx, (s*r)+cy
-		pt.X, pt.Y = x, y
-	}
 }
 
 func squareAt(screen *ebiten.Image, x, y int) {
@@ -221,16 +208,10 @@ func update(screen *ebiten.Image) error {
 		dtx = 0
 		dty = -1
 	}
-	line := lines[0]
-	for i := 0; i < len(lines)-1; i++ {
-		lines[i] = lines[i+1]
-	}
-	lines[len(lines)-1] = line
-	spiralTo(line, tx, ty)
-	squareAt(screen, tx, ty)
-	for i, line := range lines {
-		line.Draw(screen, (float64(i)+1)/6)
-	}
+
+	// squareAt(screen, tx, ty)
+	spiral.UpdateTarget(float64(tx), float64(ty))
+	spiral.Draw(screen)
 	select {
 	case <-timedOut:
 		return errors.New("regular termination")
@@ -241,6 +222,9 @@ func update(screen *ebiten.Image) error {
 
 func main() {
 	opts, _, err := gogetopt.GetOpt(os.Args[1:], "ps#")
+	if err != nil {
+		log.Fatalf("option parsing failed: %s\n", err)
+	}
 	if opts.Seen("p") {
 		f, err := os.Create("profile.dat")
 		if err != nil {
@@ -266,15 +250,9 @@ func main() {
 	}
 	NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
-	lines = make([]*PolyLine, 0, 6)
-	for i := 0; i < 6; i++ {
-		line := NewPolyLine(Sprites["white"], Palettes["rainbow"])
-		for j := 0; j < 600; j++ {
-			line.Add(0, 0, line.Palette.Paint(j+i))
-		}
-		spiralTo(line, tx, ty+(i*3))
-		lines = append(lines, line)
-	}
+	spiral = NewSpiral(6, 600, Palettes["rainbow"])
+	spiral.Center = Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}
+	spiral.Theta = 8 * math.Pi
 	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Lights Out?"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}

@@ -23,18 +23,21 @@ type PolyLine struct {
 	sx, sy    float64
 }
 
+// A LinePoint is one point in a PolyLine, containing both
+// a location and a Paint corresponding to the PolyLine's Palette.
 type LinePoint struct {
 	X, Y float64
 	P    Paint
 }
 
+// NewPolyLine creates a new PolyLine using the specified sprite and palette.
 func NewPolyLine(sp *Sprite, p *Palette) *PolyLine {
 	pl := &PolyLine{sp: sp, Palette: p}
 	return pl
 }
 
-// Draw renders the line on the target, using drawimage options modified by
-// color and location of line segments.
+// Draw renders the line on the target, using the sprite's drawimage
+// options modified by color and location of line segments.
 func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	// can't draw without an image
 	if pl.sp == nil {
@@ -74,10 +77,12 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	}
 }
 
+// Length yields the number of points in the line.
 func (pl PolyLine) Length() int {
 	return len(pl.Points)
 }
 
+// Point yields a given point within the line.
 func (pl PolyLine) Point(i int) *LinePoint {
 	if i < 0 || i >= len(pl.Points) {
 		return nil
@@ -85,6 +90,7 @@ func (pl PolyLine) Point(i int) *LinePoint {
 	return &pl.Points[i]
 }
 
+// Add adds a new point to the line.
 func (pl *PolyLine) Add(x, y float64, p Paint) {
 	pt := LinePoint{X: x, Y: y, P: p}
 	pl.Points = append(pl.Points, pt)

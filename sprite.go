@@ -6,14 +6,20 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
+// A Sprite combines an image with a source rectangle, embedded in an
+// ebiten.DrawImageOptions containing a SourceRect and a GeoM.
+// The DrawImageOptions scales the image to a 1x1 image centered on {0,0}.
 type Sprite struct {
 	Image *ebiten.Image
 	Op    ebiten.DrawImageOptions
 	w, h  int
 }
 
-var Sprites map[string]*Sprite = make(map[string]*Sprite)
+// Sprites represents the set of known sprites.
+var Sprites = make(map[string]*Sprite)
 
+// NewSprite creates a new sprite (unless one with that name already
+// exists) using the given source rectangle and image.
 func NewSprite(name string, img *ebiten.Image, sr image.Rectangle) *Sprite {
 	if sp, ok := Sprites[name]; ok {
 		return sp
