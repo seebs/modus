@@ -20,7 +20,7 @@ type Spiral struct {
 func NewSpiral(depth int, points int, p *Palette) *Spiral {
 	s := &Spiral{Depth: depth}
 	for i := 0; i < depth; i++ {
-		l := NewPolyLine(Sprites["white"], p)
+		l := NewPolyLine(p)
 		l.Points = make([]LinePoint, points)
 		for j := 0; j < points; j++ {
 			l.Points[j].P = p.Paint(j)

@@ -3,6 +3,8 @@ package main
 import (
 	"math"
 
+	"image/color"
+
 	"github.com/hajimehoshi/ebiten"
 )
 
@@ -17,10 +19,25 @@ import (
 // convenient.
 type PolyLine struct {
 	Points    []LinePoint
-	sp        *Sprite
 	Thickness float64
 	Palette   *Palette
 	sx, sy    float64
+	vertices  []ebiten.Vertex
+	indices   []int
+}
+
+var lineTexture *ebiten.Image
+
+func init() {
+	var err error
+	lineTexture, err = ebiten.NewImage(1, 1, ebiten.FilterDefault)
+	if err != nil {
+		panic("can't create line image!")
+	}
+	err = lineTexture.Fill(color.NRGBA{255,255,255,255})
+	if err != nil {
+		panic("can't fill line image!")
+	}
 }
 
 // A LinePoint is one point in a PolyLine, containing both
@@ -31,18 +48,14 @@ type LinePoint struct {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func NewPolyLine(sp *Sprite, p *Palette) *PolyLine {
-	pl := &PolyLine{sp: sp, Palette: p}
+func NewPolyLine(p *Palette) *PolyLine {
+	pl := &PolyLine{Palette: p}
 	return pl
 }
 
 // Draw renders the line on the target, using the sprite's drawimage
 // options modified by color and location of line segments.
 func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
-	// can't draw without an image
-	if pl.sp == nil {
-		return
-	}
 	thickness := pl.Thickness
 	// no invisible lines plz
 	if thickness == 0 {
@@ -50,7 +63,7 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	}
 	prev := pl.Points[0]
 	count := 0
-	op := pl.sp.Op
+	op := ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterLinear
 	baseG := op.GeoM
 	for _, next := range pl.Points[1:] {
@@ -69,9 +82,9 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 		op.ColorM = pl.Palette.Color(next.P)
 		op.ColorM.Scale(1, 1, 1, 0.5*alpha)
 		op.GeoM = g
-		target.DrawImage(pl.sp.Image, &op)
+		target.DrawImage(lineTexture, &op)
 		op.GeoM = g2
-		target.DrawImage(pl.sp.Image, &op)
+		target.DrawImage(lineTexture, &op)
 		prev = next
 		count++
 	}

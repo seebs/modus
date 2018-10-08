@@ -35,6 +35,7 @@ type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
 	Palette       *Palette
+	X int
 }
 
 func (g *Grid) RandRow() int {
