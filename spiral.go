@@ -12,18 +12,21 @@ type Spiral struct {
 	Center, Target Point
 	Theta          float64
 	Depth          int
+	Palette        *Palette
 	pl             []*PolyLine
 	sprite         *Sprite
 }
 
 // NewSpiral creates a new spiral.
-func NewSpiral(depth int, points int, p *Palette) *Spiral {
+func NewSpiral(depth int, points int, p *Palette, cycles int) *Spiral {
 	s := &Spiral{Depth: depth}
+	s.Palette = p.Interpolate(points / (p.Length * cycles))
 	for i := 0; i < depth; i++ {
-		l := NewPolyLine(p)
+		l := NewPolyLine(s.Palette, 3)
+		l.Thickness = 3
 		l.Points = make([]LinePoint, points)
 		for j := 0; j < points; j++ {
-			l.Points[j].P = p.Paint(j)
+			l.Points[j].P = s.Palette.Paint(j)
 		}
 		s.pl = append(s.pl, l)
 	}
@@ -34,6 +37,7 @@ func NewSpiral(depth int, points int, p *Palette) *Spiral {
 func (s *Spiral) Draw(target *ebiten.Image) {
 	for i := 0; i < s.Depth; i++ {
 		s.pl[i].Draw(target, (float64(i)+1)/float64(s.Depth))
+		// s.pl[i].Draw(target, 1.0)
 	}
 }
 

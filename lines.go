@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"math"
+	"os"
 
 	"image/color"
 
@@ -20,10 +22,11 @@ import (
 type PolyLine struct {
 	Points    []LinePoint
 	Thickness float64
+	Depth     int
 	Palette   *Palette
 	sx, sy    float64
 	vertices  []ebiten.Vertex
-	indices   []int
+	indices   []uint16
 }
 
 var lineTexture *ebiten.Image
@@ -48,9 +51,19 @@ type LinePoint struct {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func NewPolyLine(p *Palette) *PolyLine {
-	pl := &PolyLine{Palette: p}
+func NewPolyLine(p *Palette, depth int) *PolyLine {
+	pl := &PolyLine{Palette: p, Depth: depth}
 	return pl
+}
+
+// corresponding indices:
+// 1 0 2, 2 3 1
+// the unchanging parts
+var fourVertices = []ebiten.Vertex {
+	{ SrcX: 0, SrcY: 0, ColorA: 1.0 }, // prev + nx,ny
+	{ SrcX: 0, SrcY: 1, ColorA: 1.0 }, // prev - nx,ny
+	{ SrcX: 1, SrcY: 0, ColorA: 1.0 }, // next + nx,ny
+	{ SrcX: 1, SrcY: 1, ColorA: 1.0 }, // next - nx,ny
 }
 
 // Draw renders the line on the target, using the sprite's drawimage
@@ -61,33 +74,86 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 	if thickness == 0 {
 		thickness = 0.7
 	}
+	halfthick := thickness / 2
+	// we need four points per line segment per depth
+	segments := len(pl.Points) - 1
+	if segments < 1 {
+		// fail
+		fmt.Fprintf(os.Stderr, "polyline of %d segments can't be drawn\n", segments)
+		return
+	}
+	// populate with the SrcX, SrcY values.
+	if len(pl.vertices) < segments * 4 * pl.Depth {
+		pl.vertices = make([]ebiten.Vertex, 0, segments * 4 * pl.Depth)
+		for i := 0; i < segments; i++ {
+			for j := 0; j < pl.Depth; j++ {
+				pl.vertices = append(pl.vertices, fourVertices...)
+			}
+		}
+	}
+	// indices can never change, conveniently!
+	if len(pl.indices) < segments * 6 * pl.Depth {
+		pl.indices = make([]uint16, 0, segments * 6 * pl.Depth)
+		for i := 0; i < segments; i++ {
+			offset := uint16(i * 4 * pl.Depth)
+			for j := 0; j < pl.Depth; j++ {
+				pl.indices = append(pl.indices,
+					offset + 1, offset + 0, offset + 2,
+					offset + 2, offset + 3, offset + 1)
+				offset += 4
+			}
+		}
+	}
 	prev := pl.Points[0]
-	count := 0
 	op := ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterLinear
-	baseG := op.GeoM
+	r0, g0, b0, _ := pl.Palette.Float32(prev.P)
+	count := 0
+	scaledAlpha := float32(alpha / float64(pl.Depth))
 	for _, next := range pl.Points[1:] {
-		cx, cy := (prev.X+next.X)/2, (prev.Y+next.Y)/2
 		dx, dy := (next.X - prev.X), (next.Y - prev.Y)
+		if dx == 0 && dy == 0 {
+			// don't draw 0-length line, don't divide by zero, but
+			// do update the point so we use the right color to draw
+			// the next segment.
+			prev = next
+			r0, g0, b0, _ = pl.Palette.Float32(next.P)
+			continue
+		}
 		l := math.Sqrt(dx*dx + dy*dy)
-		theta := math.Atan2(dy, dx)
-		g := baseG
-		g2 := baseG
-		g.Scale(l, thickness)
-		g2.Scale(l, (thickness + 0.5))
-		g.Rotate(theta)
-		g2.Rotate(theta)
-		g.Translate(cx, cy)
-		g2.Translate(cx, cy)
-		op.ColorM = pl.Palette.Color(next.P)
-		op.ColorM.Scale(1, 1, 1, 0.5*alpha)
-		op.GeoM = g
-		target.DrawImage(lineTexture, &op)
-		op.GeoM = g2
-		target.DrawImage(lineTexture, &op)
+		// compute normal x/y values, scaled to unit length
+		nx, ny := dy / l, -dx / l
+		r1, g1, b1, _ := pl.Palette.Float32(next.P)
+		// Depth is a sort of cheap fake antialiasing done to let us blur lines a bit
+		offset := uint16(count * pl.Depth * 4)
+		for i := 0; i < pl.Depth; i++ {
+			subAlpha := scaledAlpha * float32(i+1)
+			scale := float64(pl.Depth - i) / float64(pl.Depth)
+			v := pl.vertices[offset:offset+4]
+			v[0].DstX = float32(prev.X + nx * halfthick * scale)
+			v[0].DstY = float32(prev.Y + ny * halfthick * scale)
+			v[1].DstX = float32(prev.X - nx * halfthick * scale)
+			v[1].DstY = float32(prev.Y - ny * halfthick * scale)
+			v[2].DstX = float32(next.X + nx * halfthick * scale)
+			v[2].DstY = float32(next.Y + ny * halfthick * scale)
+			v[3].DstX = float32(next.X - nx * halfthick * scale)
+			v[3].DstY = float32(next.Y - ny * halfthick * scale)
+			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, subAlpha
+			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r0, g0, b0, subAlpha
+			v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA  = r1, g1, b1, subAlpha
+			v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA  = r1, g1, b1, subAlpha
+			offset += 4
+		}
+
+		// rotate colors
+		r0, g0, b0 = r1, g1, b1
+		// rotate points
 		prev = next
+		// bump count since we drew a segment
 		count++
 	}
+	// draw the triangles
+	target.DrawTriangles(pl.vertices[:count*4*pl.Depth], pl.indices[:count*6*pl.Depth], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 }
 
 // Length yields the number of points in the line.

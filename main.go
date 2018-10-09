@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	screenWidth  = 640
-	screenHeight = 480
+	screenWidth  = 1280
+	screenHeight = 960
 )
 
 // A Renderable is a thing, like a spiral or a grid, which has
@@ -108,7 +108,7 @@ func (g *Grid) Draw(screen *ebiten.Image) {
 	grid.Iterate(func(g *Grid, l Loc, _ *Paint) {
 		op.GeoM.Reset()
 		op.GeoM.Translate(float64(l.X*xscale), float64(l.Y*yscale))
-		op.ColorM = g.Palette.Color(g.Squares[l.X][l.Y])
+		op.ColorM = g.Palette.ColorM(g.Squares[l.X][l.Y])
 		screen.DrawImage(square, op)
 	})
 }
@@ -118,6 +118,7 @@ var (
 	op       = &ebiten.DrawImageOptions{}
 	grid     Grid
 	spiral   *Spiral
+	line	 *PolyLine
 	knights  []Loc
 	knight   int
 	timedOut <-chan time.Time
@@ -157,9 +158,21 @@ func squareAt(screen *ebiten.Image, x, y int) {
 	screen.DrawImage(square, &op)
 }
 
+var lagCounter = 0
+var pause = false
+var prevSpace = false
+
 func update(screen *ebiten.Image) error {
 	if ebiten.IsKeyPressed(ebiten.KeyQ) {
 		return errors.New("quit requested")
+	}
+	if ebiten.IsKeyPressed(ebiten.KeySpace) {
+		if !prevSpace {
+			pause = !pause
+			prevSpace = true
+		}
+	} else {
+		prevSpace = false
 	}
 	k := &knights[knight]
 	*k = grid.Add(*k, knightMove())
@@ -184,34 +197,36 @@ func update(screen *ebiten.Image) error {
 			g.Rotate(float64(j) * math.Pi / 8)
 			g.Translate(64*float64(i)+32, 64*float64(j)+32)
 			op.GeoM = g
-			screen.DrawImage(square, &op)
+			// screen.DrawImage(square, &op)
 		}
 	}
-	ty += dty * 8
-	if ty > screenHeight {
-		ty = screenHeight
-		dty = 0
-		dtx = -1
-	}
-	if ty < 0 {
-		ty = 0
-		dty = 0
-		dtx = 1
-	}
-	tx += dtx * 8
-	if tx > screenWidth {
-		tx = screenWidth
-		dtx = 0
-		dty = 1
-	}
-	if tx < 0 {
-		tx = 0
-		dtx = 0
-		dty = -1
-	}
+	if !pause {
+		ty += dty * 24
+		if ty > screenHeight {
+			ty = screenHeight
+			dty = 0
+			dtx = -1
+		}
+		if ty < 0 {
+			ty = 0
+			dty = 0
+			dtx = 1
+		}
+		tx += dtx * 24
+		if tx > screenWidth {
+			tx = screenWidth
+			dtx = 0
+			dty = 1
+		}
+		if tx < 0 {
+			tx = 0
+			dtx = 0
+			dty = -1
+		}
 
-	// squareAt(screen, tx, ty)
-	spiral.UpdateTarget(float64(tx), float64(ty))
+		// squareAt(screen, tx, ty)
+		spiral.UpdateTarget(float64(tx), float64(ty))
+	}
 	spiral.Draw(screen)
 	select {
 	case <-timedOut:
@@ -251,10 +266,10 @@ func main() {
 	}
 	NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
-	spiral = NewSpiral(6, 600, Palettes["rainbow"])
+	spiral = NewSpiral(6, 360, Palettes["rainbow"], 3)
 	spiral.Center = Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}
 	spiral.Theta = 8 * math.Pi
-	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Lights Out?"); err != nil {
+	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Lights Out?"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }
