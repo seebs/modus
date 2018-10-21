@@ -1,6 +1,7 @@
-package main
+package g
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/hajimehoshi/ebiten"
@@ -18,6 +19,9 @@ type Spiral struct {
 	Ripples        []int
 	pl             []*PolyLine
 	sprite         *Sprite
+	triangle       float64
+	fudged         float64
+	fudge          int
 }
 
 // the ripple pattern is used to perturb the radius of a spiral to make it look
@@ -26,7 +30,8 @@ var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
 
 // NewSpiral creates a new spiral.
 func NewSpiral(depth int, points int, p *Palette, cycles int) *Spiral {
-	s := &Spiral{Depth: depth, Length: points}
+	s := &Spiral{Depth: depth, Length: points, triangle: float64(((points * points) + points) / 2)}
+	s.Fudge(0)
 	s.Palette = p.Interpolate(s.Length / (p.Length * cycles))
 	for i := 0; i < depth; i++ {
 		l := NewPolyLine(s.Palette, 3)
@@ -38,6 +43,15 @@ func NewSpiral(depth int, points int, p *Palette, cycles int) *Spiral {
 		s.pl = append(s.pl, l)
 	}
 	return s
+}
+
+// Fudge increases/decreases the fudge factor, used for debugging.
+func (s *Spiral) Fudge(fudge int) {
+	if s.fudge+fudge >= 0 {
+		s.fudge += fudge
+		s.fudged = s.triangle + float64(s.Length*s.fudge)
+		fmt.Printf("new fudge: %d\n", s.fudge)
+	}
 }
 
 // Draw draws the spiral on the specified image.
@@ -52,7 +66,6 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	dx, dy := s.Target.Loc.X-s.Center.Loc.X, s.Target.Loc.Y-s.Center.Loc.Y
 	baseTheta := math.Atan2(dy, dx)
 	baseR := math.Sqrt(dx*dx + dy*dy)
-	scaleR := s.Theta
 	ripples := make([]int, s.Length)
 	drop := 0
 	for idx, rip := range s.Ripples {
@@ -72,9 +85,11 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	pt.X, pt.Y = s.Center.Loc.X, s.Center.Loc.Y
 	pt = pl.Point(s.Length - 1)
 	pt.X, pt.Y = s.Target.Loc.X, s.Target.Loc.Y
+	counter := s.Length + s.fudge
 	for i := 1; i < s.Length-1; i++ {
 		pt := pl.Point(i)
-		sin, cos := math.Sincos(float64(i)/float64(s.Length-1)*scaleR + baseTheta)
+		sin, cos := math.Sincos((float64(counter)*s.Theta)/s.fudged + baseTheta)
+		counter += s.Length - i + s.fudge
 		r := float64(i) / float64(s.Length-1) * baseR
 		if ripples[i] != 0 {
 			r *= 1 + (0.03 * float64(ripples[i]))

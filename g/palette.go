@@ -1,4 +1,4 @@
-package main
+package g
 
 import (
 	"image/color"
@@ -21,12 +21,12 @@ type Palette struct {
 var Palettes = map[string]*Palette{
 	"rainbow": {
 		RGBA: []color.RGBA{
-			{255, 0, 0, 255},
-			color.RGBA{240, 90, 0, 255},
-			color.RGBA{220, 220, 0, 255},
-			color.RGBA{0, 200, 0, 255},
-			color.RGBA{0, 0, 255, 255},
-			color.RGBA{180, 0, 200, 255},
+			{240, 0, 0, 255},
+			{240, 90, 0, 255},
+			{220, 220, 0, 255},
+			{0, 200, 0, 255},
+			{0, 0, 255, 255},
+			{180, 0, 200, 255},
 		},
 	},
 }

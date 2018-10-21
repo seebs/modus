@@ -1,4 +1,4 @@
-package main
+package g
 
 import (
 	"fmt"
@@ -24,6 +24,7 @@ type PolyLine struct {
 	Thickness float64
 	Depth     int
 	Palette   *Palette
+	Blend     bool
 	sx, sy    float64
 	vertices  []ebiten.Vertex
 	indices   []uint16
@@ -52,7 +53,7 @@ type LinePoint struct {
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
 func NewPolyLine(p *Palette, depth int) *PolyLine {
-	pl := &PolyLine{Palette: p, Depth: depth}
+	pl := &PolyLine{Palette: p, Depth: depth, Blend: true}
 	return pl
 }
 
@@ -138,8 +139,13 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 			v[2].DstY = float32(next.Y + ny * halfthick * scale)
 			v[3].DstX = float32(next.X - nx * halfthick * scale)
 			v[3].DstY = float32(next.Y - ny * halfthick * scale)
-			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, subAlpha
-			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r0, g0, b0, subAlpha
+			if pl.Blend {
+				v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, subAlpha
+				v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r0, g0, b0, subAlpha
+			} else {
+				v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r1, g1, b1, subAlpha
+				v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r1, g1, b1, subAlpha
+			}
 			v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA  = r1, g1, b1, subAlpha
 			v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA  = r1, g1, b1, subAlpha
 			offset += 4
