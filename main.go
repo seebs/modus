@@ -35,7 +35,7 @@ type Grid struct {
 	Width, Height int
 	Squares       [][]Paint
 	Palette       *Palette
-	X int
+	X             int
 }
 
 func (g *Grid) RandRow() int {
@@ -118,7 +118,7 @@ var (
 	op       = &ebiten.DrawImageOptions{}
 	grid     Grid
 	spiral   *Spiral
-	line	 *PolyLine
+	line     *PolyLine
 	knights  []Loc
 	knight   int
 	timedOut <-chan time.Time
@@ -160,19 +160,39 @@ func squareAt(screen *ebiten.Image, x, y int) {
 
 var lagCounter = 0
 var pause = false
-var prevSpace = false
+
+var keyStates [ebiten.KeyMax]byte
+
+const (
+	PRESS   = 0x01
+	RELEASE = 0x02
+	HOLD    = 0x03
+)
+
+func pressed(key ebiten.Key) bool {
+	return (keyStates[key] & HOLD) == PRESS
+}
+
+func released(key ebiten.Key) bool {
+	return (keyStates[key] & HOLD) == RELEASE
+}
+
+func held(key ebiten.Key) bool {
+	return (keyStates[key] & HOLD) == HOLD
+}
 
 func update(screen *ebiten.Image) error {
-	if ebiten.IsKeyPressed(ebiten.KeyQ) {
+	for i := ebiten.Key(0); i < ebiten.KeyMax; i++ {
+		keyStates[i] = (keyStates[i] << 1)
+		if ebiten.IsKeyPressed(i) {
+			keyStates[i] |= 1
+		}
+	}
+	if released(ebiten.KeyQ) {
 		return errors.New("quit requested")
 	}
-	if ebiten.IsKeyPressed(ebiten.KeySpace) {
-		if !prevSpace {
-			pause = !pause
-			prevSpace = true
-		}
-	} else {
-		prevSpace = false
+	if pressed(ebiten.KeySpace) {
+		pause = !pause
 	}
 	k := &knights[knight]
 	*k = grid.Add(*k, knightMove())
@@ -200,32 +220,8 @@ func update(screen *ebiten.Image) error {
 			// screen.DrawImage(square, &op)
 		}
 	}
-	if !pause {
-		ty += dty * 24
-		if ty > screenHeight {
-			ty = screenHeight
-			dty = 0
-			dtx = -1
-		}
-		if ty < 0 {
-			ty = 0
-			dty = 0
-			dtx = 1
-		}
-		tx += dtx * 24
-		if tx > screenWidth {
-			tx = screenWidth
-			dtx = 0
-			dty = 1
-		}
-		if tx < 0 {
-			tx = 0
-			dtx = 0
-			dty = -1
-		}
-
-		// squareAt(screen, tx, ty)
-		spiral.UpdateTarget(float64(tx), float64(ty))
+	if !pause || released(ebiten.KeyRight) {
+		spiral.Update()
 	}
 	spiral.Draw(screen)
 	select {
@@ -266,10 +262,13 @@ func main() {
 	}
 	NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
-	spiral = NewSpiral(6, 360, Palettes["rainbow"], 3)
-	spiral.Center = Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}
+	spiral = NewSpiral(11, 360, Palettes["rainbow"], 3)
+	spiral.Center = MovingPoint{Loc: Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
+	spiral.Target = MovingPoint{Loc: Point{X: screenWidth, Y: screenHeight}, Velocity: Point{X: 15, Y: 15}}
+	spiral.Target.SetBounds(screenWidth, screenHeight)
 	spiral.Theta = 8 * math.Pi
-	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Lights Out?"); err != nil {
+	spiral.Step = 2
+	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }
