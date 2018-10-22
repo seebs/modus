@@ -28,7 +28,8 @@ type PolyLine struct {
 	Depth     int
 	Palette   *Palette
 	Blend     bool
-	sx, sy    float64
+	Joined    bool // one segment per point past the first, rather than each pair a segment
+	debug     *PolyLine
 	vertices  []ebiten.Vertex
 	indices   []uint16
 }
@@ -98,6 +99,15 @@ func NewPolyLine(p *Palette, depth int) *PolyLine {
 	return pl
 }
 
+func (pl *PolyLine) Debug(enable bool) {
+	if enable {
+		pl.debug = NewPolyLine(pl.Palette, 1)
+		pl.debug.Thickness = 2
+	} else {
+		pl.debug = nil
+	}
+}
+
 // corresponding indices:
 // 1 0 2, 2 3 1
 // the unchanging parts
@@ -109,9 +119,15 @@ var fourVertices = []ebiten.Vertex{
 }
 var fourVerticesByDepth [][]ebiten.Vertex
 
+type LineBits struct {
+	dx, dy float64 // delta x, delta y
+	l      float64 // length
+	nx, ny float64 // normal vector, normalized to unit length
+}
+
 // Draw renders the line on the target, using the sprite's drawimage
 // options modified by color and location of line segments.
-func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
+func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	alpha := float32(alpha64)
 	thickness := pl.Thickness
 	// no invisible lines plz
@@ -120,7 +136,12 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	}
 	halfthick := thickness / 2
 	// we need four points per line segment per depth
-	segments := len(pl.Points) - 1
+	var segments int
+	if pl.Joined {
+		segments = len(pl.Points) - 1
+	} else {
+		segments = len(pl.Points) / 2
+	}
 	if segments < 1 {
 		// fail
 		fmt.Fprintf(os.Stderr, "polyline of %d segments can't be drawn\n", segments)
@@ -146,30 +167,38 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	prev := pl.Points[0]
 	r0, g0, b0, _ := pl.Palette.Float32(prev.P)
 	count := 0
-	for _, next := range pl.Points[1:] {
-		dx, dy := (next.X - prev.X), (next.Y - prev.Y)
-		if dx == 0 && dy == 0 {
+
+	if pl.debug != nil {
+		pl.debug.Reset()
+	}
+	// Joined: We will draw one segment for each point past the first.
+	// Unjoined: We draw one segment for each pair.
+	var plb LineBits
+	for idx, next := range pl.Points[1:] {
+		lb := LineBits{dx: next.X - prev.X, dy: next.Y - prev.Y}
+		lb.l = math.Sqrt(lb.dx*lb.dx + lb.dy*lb.dy)
+		if (lb.l == 0) || (!pl.Joined && (idx%2) == 1) {
 			// don't draw 0-length line, don't divide by zero, but
 			// do update the point so we use the right color to draw
 			// the next segment.
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)
+			plb = lb
 			continue
 		}
-		l := math.Sqrt(dx*dx + dy*dy)
 		// compute normal x/y values, scaled to unit length
-		nx, ny := dy/l, -dx/l
+		lb.nx, lb.ny = lb.dy/lb.l, -lb.dx/lb.l
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
 		offset := uint16(count * 4)
 		v := pl.vertices[offset : offset+4]
-		v[0].DstX = float32(prev.X + nx*halfthick)
-		v[0].DstY = float32(prev.Y + ny*halfthick)
-		v[1].DstX = float32(prev.X - nx*halfthick)
-		v[1].DstY = float32(prev.Y - ny*halfthick)
-		v[2].DstX = float32(next.X + nx*halfthick)
-		v[2].DstY = float32(next.Y + ny*halfthick)
-		v[3].DstX = float32(next.X - nx*halfthick)
-		v[3].DstY = float32(next.Y - ny*halfthick)
+		v[0].DstX = float32(prev.X + lb.nx*halfthick)
+		v[0].DstY = float32(prev.Y + lb.ny*halfthick)
+		v[1].DstX = float32(prev.X - lb.nx*halfthick)
+		v[1].DstY = float32(prev.Y - lb.ny*halfthick)
+		v[2].DstX = float32(next.X + lb.nx*halfthick)
+		v[2].DstY = float32(next.Y + lb.ny*halfthick)
+		v[3].DstX = float32(next.X - lb.nx*halfthick)
+		v[3].DstY = float32(next.Y - lb.ny*halfthick)
 		if pl.Blend {
 			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
 			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
@@ -180,24 +209,43 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 		v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA = r1, g1, b1, alpha
 		v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
 
+		// add debugging segments
+		if pl.debug != nil && idx > 0 {
+			vX, vY := plb.ny-lb.ny, lb.nx-plb.nx
+			vX, vY = vX*halfthick, vY*halfthick
+			pl.debug.Add(prev.X, prev.Y, 4)
+			pl.debug.Add(prev.X+vX, prev.Y+vY, 4)
+		}
+
 		// rotate colors
 		r0, g0, b0 = r1, g1, b1
 		// rotate points
 		prev = next
+		plb = lb
 		// bump count since we drew a segment
 		count++
 	}
 	// draw the triangles
 	target.DrawTriangles(pl.vertices[:count*4], pl.indices[:count*6], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+	if pl.debug != nil {
+		pl.debug.Draw(target, alpha64)
+	}
 }
 
 // Length yields the number of points in the line.
-func (pl PolyLine) Length() int {
+func (pl *PolyLine) Length() int {
 	return len(pl.Points)
 }
 
+// Reset removes all points.
+func (pl *PolyLine) Reset() {
+	if pl.Points != nil {
+		pl.Points = pl.Points[:0]
+	}
+}
+
 // Point yields a given point within the line.
-func (pl PolyLine) Point(i int) *LinePoint {
+func (pl *PolyLine) Point(i int) *LinePoint {
 	if i < 0 || i >= len(pl.Points) {
 		return nil
 	}
