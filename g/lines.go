@@ -274,7 +274,6 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 			sharp := math.Pi/2 - (math.Abs(dt - (math.Pi / 2)))
 			scale := math.Tan(sharp / 2)
 			if idx == 1 && dt != prevTheta {
-				fmt.Printf("new theta for pt 1: %.1f, sharp %.1f (scale %.2f) left %v\n", dt/(math.Pi*2)*360, sharp/(math.Pi*2)*360, scale, left)
 				prevTheta = dt
 			}
 			// create bezel:
