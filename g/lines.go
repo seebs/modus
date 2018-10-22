@@ -60,16 +60,18 @@ func NewPolyLine(p *Palette, depth int) *PolyLine {
 // corresponding indices:
 // 1 0 2, 2 3 1
 // the unchanging parts
-var fourVertices = []ebiten.Vertex {
-	{ SrcX: 0, SrcY: 0, ColorA: 1.0 }, // prev + nx,ny
-	{ SrcX: 0, SrcY: 1, ColorA: 1.0 }, // prev - nx,ny
-	{ SrcX: 1, SrcY: 0, ColorA: 1.0 }, // next + nx,ny
-	{ SrcX: 1, SrcY: 1, ColorA: 1.0 }, // next - nx,ny
+var fourVertices = []ebiten.Vertex{
+	{SrcX: 0, SrcY: 0, ColorA: 1.0}, // prev + nx,ny
+	{SrcX: 0, SrcY: 1, ColorA: 1.0}, // prev - nx,ny
+	{SrcX: 1, SrcY: 0, ColorA: 1.0}, // next + nx,ny
+	{SrcX: 1, SrcY: 1, ColorA: 1.0}, // next - nx,ny
 }
+var fourVerticesByDepth [][]ebiten.Vertex
 
 // Draw renders the line on the target, using the sprite's drawimage
 // options modified by color and location of line segments.
-func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
+func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
+	alpha := float32(alpha64)
 	thickness := pl.Thickness
 	// no invisible lines plz
 	if thickness == 0 {
@@ -84,33 +86,30 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 		return
 	}
 	// populate with the SrcX, SrcY values.
-	if len(pl.vertices) < segments * 4 * pl.Depth {
-		pl.vertices = make([]ebiten.Vertex, 0, segments * 4 * pl.Depth)
+	if len(pl.vertices) < segments*4 {
+		fv := fourVertices // ByDepth[pl.Depth]
+		pl.vertices = make([]ebiten.Vertex, 0, segments*4)
 		for i := 0; i < segments; i++ {
-			for j := 0; j < pl.Depth; j++ {
-				pl.vertices = append(pl.vertices, fourVertices...)
-			}
+			pl.vertices = append(pl.vertices, fv...)
 		}
 	}
 	// indices can never change, conveniently!
-	if len(pl.indices) < segments * 6 * pl.Depth {
-		pl.indices = make([]uint16, 0, segments * 6 * pl.Depth)
-		for i := 0; i < segments; i++ {
-			offset := uint16(i * 4 * pl.Depth)
-			for j := 0; j < pl.Depth; j++ {
-				pl.indices = append(pl.indices,
-					offset + 1, offset + 0, offset + 2,
-					offset + 2, offset + 3, offset + 1)
-				offset += 4
-			}
+	if len(pl.indices) < segments*6 {
+		for i := len(pl.indices) / 6; i < segments; i++ {
+			offset := uint16(i * 4)
+			pl.indices = append(pl.indices,
+				offset+1, offset+0, offset+2,
+				offset+2, offset+3, offset+1)
 		}
 	}
 	prev := pl.Points[0]
 	op := ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterLinear
+	op.GeoM.Translate(100, 100)
+	target.DrawImage(lineTexture, &op)
+	op.GeoM.Reset()
 	r0, g0, b0, _ := pl.Palette.Float32(prev.P)
 	count := 0
-	scaledAlpha := float32(alpha / float64(pl.Depth))
 	for _, next := range pl.Points[1:] {
 		dx, dy := (next.X - prev.X), (next.Y - prev.Y)
 		if dx == 0 && dy == 0 {
@@ -123,33 +122,27 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 		}
 		l := math.Sqrt(dx*dx + dy*dy)
 		// compute normal x/y values, scaled to unit length
-		nx, ny := dy / l, -dx / l
+		nx, ny := dy/l, -dx/l
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
-		// Depth is a sort of cheap fake antialiasing done to let us blur lines a bit
-		offset := uint16(count * pl.Depth * 4)
-		for i := 0; i < pl.Depth; i++ {
-			subAlpha := scaledAlpha * float32(i+1)
-			scale := float64(pl.Depth - i) / float64(pl.Depth)
-			v := pl.vertices[offset:offset+4]
-			v[0].DstX = float32(prev.X + nx * halfthick * scale)
-			v[0].DstY = float32(prev.Y + ny * halfthick * scale)
-			v[1].DstX = float32(prev.X - nx * halfthick * scale)
-			v[1].DstY = float32(prev.Y - ny * halfthick * scale)
-			v[2].DstX = float32(next.X + nx * halfthick * scale)
-			v[2].DstY = float32(next.Y + ny * halfthick * scale)
-			v[3].DstX = float32(next.X - nx * halfthick * scale)
-			v[3].DstY = float32(next.Y - ny * halfthick * scale)
-			if pl.Blend {
-				v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, subAlpha
-				v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r0, g0, b0, subAlpha
-			} else {
-				v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r1, g1, b1, subAlpha
-				v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA  = r1, g1, b1, subAlpha
-			}
-			v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA  = r1, g1, b1, subAlpha
-			v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA  = r1, g1, b1, subAlpha
-			offset += 4
+		offset := uint16(count * 4)
+		v := pl.vertices[offset : offset+4]
+		v[0].DstX = float32(prev.X + nx*halfthick)
+		v[0].DstY = float32(prev.Y + ny*halfthick)
+		v[1].DstX = float32(prev.X - nx*halfthick)
+		v[1].DstY = float32(prev.Y - ny*halfthick)
+		v[2].DstX = float32(next.X + nx*halfthick)
+		v[2].DstY = float32(next.Y + ny*halfthick)
+		v[3].DstX = float32(next.X - nx*halfthick)
+		v[3].DstY = float32(next.Y - ny*halfthick)
+		if pl.Blend {
+			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
+			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
+		} else {
+			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r1, g1, b1, alpha
+			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r1, g1, b1, alpha
 		}
+		v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA = r1, g1, b1, alpha
+		v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
 
 		// rotate colors
 		r0, g0, b0 = r1, g1, b1
@@ -158,8 +151,9 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha float64) {
 		// bump count since we drew a segment
 		count++
 	}
+	fmt.Printf("vertices: %#v\nindices: %#v\n", pl.vertices[:count*4], pl.indices[:count*6])
 	// draw the triangles
-	target.DrawTriangles(pl.vertices[:count*4*pl.Depth], pl.indices[:count*6*pl.Depth], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+	target.DrawTriangles(pl.vertices[:count*4], pl.indices[:count*6], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 }
 
 // Length yields the number of points in the line.
