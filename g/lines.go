@@ -2,8 +2,11 @@ package g
 
 import (
 	"fmt"
+	"image"
+	"log"
 	"math"
 	"os"
+	"sync"
 
 	"image/color"
 
@@ -32,18 +35,6 @@ type PolyLine struct {
 
 var lineTexture *ebiten.Image
 
-func init() {
-	var err error
-	lineTexture, err = ebiten.NewImage(1, 1, ebiten.FilterDefault)
-	if err != nil {
-		panic("can't create line image!")
-	}
-	err = lineTexture.Fill(color.NRGBA{255,255,255,255})
-	if err != nil {
-		panic("can't fill line image!")
-	}
-}
-
 // A LinePoint is one point in a PolyLine, containing both
 // a location and a Paint corresponding to the PolyLine's Palette.
 type LinePoint struct {
@@ -51,8 +42,58 @@ type LinePoint struct {
 	P    Paint
 }
 
+var (
+	initLineTexture sync.Once
+)
+
+// each depth from 0..3 gets a 16x16 box, of which it is the
+// 14x14 pixels in the middle
+//
+var (
+	depths = [4][14]byte{
+		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+		{127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127},
+		{85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85},
+		{63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63},
+	}
+)
+
+func createLineTexture() {
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
+	for depth := 0; depth < 4; depth++ {
+		offsetX := (depth%2)*16 + 1
+		offsetY := (depth/2)*16 + 1
+		offsetXf := float32(offsetX)
+		offsetYf := float32(offsetY)
+		scalef := float32(14)
+		for r := 0; r < 14; r++ {
+			v := depths[depth][r]
+			col := color.RGBA{v, v, v, v}
+			for c := 0; c < 14; c++ {
+				img.Set(offsetX+c, offsetY+r, col)
+			}
+		}
+		triVertices := make([]ebiten.Vertex, 4)
+		for i := 0; i < 4; i++ {
+			triVertices[i] = fourVertices[i]
+			triVertices[i].SrcX = offsetXf + triVertices[i].SrcX*scalef
+			triVertices[i].SrcY = offsetYf + triVertices[i].SrcY*scalef
+		}
+		fourVerticesByDepth = append(fourVerticesByDepth, triVertices)
+	}
+	var err error
+	lineTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
+	if err != nil {
+		log.Fatal("couldn't create image: %s", err)
+	}
+}
+
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
 func NewPolyLine(p *Palette, depth int) *PolyLine {
+	initLineTexture.Do(createLineTexture)
+	if depth > 3 {
+		depth = 3
+	}
 	pl := &PolyLine{Palette: p, Depth: depth, Blend: true}
 	return pl
 }
@@ -87,7 +128,7 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*4 {
-		fv := fourVertices // ByDepth[pl.Depth]
+		fv := fourVerticesByDepth[pl.Depth]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*4)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv...)
@@ -103,11 +144,6 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 		}
 	}
 	prev := pl.Points[0]
-	op := ebiten.DrawImageOptions{}
-	op.Filter = ebiten.FilterLinear
-	op.GeoM.Translate(100, 100)
-	target.DrawImage(lineTexture, &op)
-	op.GeoM.Reset()
 	r0, g0, b0, _ := pl.Palette.Float32(prev.P)
 	count := 0
 	for _, next := range pl.Points[1:] {
@@ -151,7 +187,6 @@ func (pl PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 		// bump count since we drew a segment
 		count++
 	}
-	fmt.Printf("vertices: %#v\nindices: %#v\n", pl.vertices[:count*4], pl.indices[:count*6])
 	// draw the triangles
 	target.DrawTriangles(pl.vertices[:count*4], pl.indices[:count*6], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 }
