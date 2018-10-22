@@ -118,6 +118,7 @@ func main() {
 	line.Add(600, 100, 3)
 	line.Add(100, 100, 4)
 	line.Thickness = 80
+	line.Joined = true
 
 	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
