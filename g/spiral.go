@@ -17,17 +17,30 @@ type Spiral struct {
 	Palette        *Palette
 	Ripples        []int
 	pl             []*PolyLine
+	thetas         []float64
 	sprite         *Sprite
+	scaleTheta     float64
+	thetaRatio     float64
 }
 
 // the ripple pattern is used to perturb the radius of a spiral to make it look
 // like it's bouncing.
 var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
+var defaultThetaRatio = 4.0
 
 // NewSpiral creates a new spiral.
 func NewSpiral(depth int, points int, p *Palette, cycles int, offset int) *Spiral {
 	s := &Spiral{Depth: depth, Length: points}
-	s.Palette = p.Interpolate(s.Length / (p.Length * cycles))
+	// we want to make it through the palette cycles times; for instance,
+	// if cycles is 3, we want a total of 18 color shifts, divided among
+	// s.Length segments, so that's the interpolation scale.
+	paletteScale := s.Length / (p.Length * cycles)
+	s.Palette = p.Interpolate(paletteScale)
+	// an offset of 1 is "one color"
+	offset *= paletteScale
+	// scale theta: inner points get thetaRatio times as much theta as outer points
+	s.thetas = make([]float64, s.Length)
+	s.SetThetaRatio(defaultThetaRatio)
 	for i := 0; i < depth; i++ {
 		l := NewPolyLine(s.Palette, 3)
 		l.Thickness = 3
@@ -40,6 +53,19 @@ func NewSpiral(depth int, points int, p *Palette, cycles int, offset int) *Spira
 		s.pl = append(s.pl, l)
 	}
 	return s
+}
+
+// SetThetaRatio recomputes theta values for a 1:N theta ratio,
+// meaning that the innermost segment will be about N times as
+// large an angle as the outermost.
+func (s *Spiral) SetThetaRatio(ratio float64) {
+	s.thetaRatio = ratio
+	subscale := (s.thetaRatio - 1.0) / float64(s.Length)
+	s.scaleTheta = 0
+	for i := 1; i < s.Length; i++ {
+		s.scaleTheta += (subscale * float64(s.Length-i)) + 1
+		s.thetas[i] = s.scaleTheta
+	}
 }
 
 // Draw draws the spiral on the specified image.
@@ -72,11 +98,9 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	pt.X, pt.Y = s.Center.Loc.X, s.Center.Loc.Y
 	pt = pl.Point(s.Length - 1)
 	pt.X, pt.Y = s.Target.Loc.X, s.Target.Loc.Y
-	counter := 1
 	for i := 1; i < s.Length-1; i++ {
 		pt := pl.Point(i)
-		sin, cos := math.Sincos((float64(counter)*s.Theta)/float64(s.Length) + baseTheta)
-		counter += 1
+		sin, cos := math.Sincos((s.thetas[i]/s.scaleTheta)*s.Theta + baseTheta)
 		r := float64(i) / float64(s.Length-1) * baseR
 		if ripples[i] != 0 {
 			r *= 1 + (0.03 * float64(ripples[i]))
