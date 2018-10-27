@@ -178,7 +178,7 @@ func main() {
 	g.NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	g.NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
 	for i := 0; i < 3; i++ {
-		spiral := g.NewSpiral(11, 1600, g.Palettes["rainbow"], 3, 66 * i)
+		spiral := g.NewSpiral(11, 800, g.Palettes["rainbow"], 3, i * 2)
 		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
 		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64() * 30 - 15, Y: rand.Float64() * 30 - 15}}
 		spiral.Target.SetBounds(screenWidth, screenHeight)
