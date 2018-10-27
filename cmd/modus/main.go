@@ -28,7 +28,7 @@ var (
 	square   *ebiten.Image
 	op       = &ebiten.DrawImageOptions{}
 	grid     g.Grid
-	spiral   *g.Spiral
+	spirals  []*g.Spiral
 	line     *g.PolyLine
 	knights  []g.Loc
 	knight   int
@@ -105,12 +105,6 @@ func update(screen *ebiten.Image) error {
 	if pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
-	if released(ebiten.KeyF) {
-		spiral.Fudge(1)
-	}
-	if released(ebiten.KeyG) {
-		spiral.Fudge(-1)
-	}
 	k := &knights[knight]
 	*k = grid.Add(*k, knightMove())
 	grid.Inc(*k, 2)
@@ -138,9 +132,13 @@ func update(screen *ebiten.Image) error {
 		}
 	}
 	if !pause || released(ebiten.KeyRight) {
-		spiral.Update()
+		for _, s := range spirals {
+			s.Update()
+		}
 	}
-	spiral.Draw(screen)
+	for _, s := range spirals {
+		s.Draw(screen)
+	}
 	select {
 	case <-timedOut:
 		return errors.New("regular termination")
@@ -179,12 +177,15 @@ func main() {
 	}
 	g.NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	g.NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
-	spiral = g.NewSpiral(11, 120, g.Palettes["rainbow"], 3)
-	spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
-	spiral.Target = g.MovingPoint{Loc: g.Point{X: screenWidth, Y: screenHeight}, Velocity: g.Point{X: 15, Y: 15}}
-	spiral.Target.SetBounds(screenWidth, screenHeight)
-	spiral.Theta = 8 * math.Pi
-	spiral.Step = 2
+	for i := 0; i < 3; i++ {
+		spiral := g.NewSpiral(11, 1600, g.Palettes["rainbow"], 3, 66 * i)
+		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
+		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64() * 30 - 15, Y: rand.Float64() * 30 - 15}}
+		spiral.Target.SetBounds(screenWidth, screenHeight)
+		spiral.Theta = 8 * math.Pi
+		spiral.Step = 2
+		spirals = append(spirals, spiral)
+	}
 	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
