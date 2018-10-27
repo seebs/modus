@@ -1,7 +1,6 @@
 package g
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/hajimehoshi/ebiten"
@@ -19,9 +18,6 @@ type Spiral struct {
 	Ripples        []int
 	pl             []*PolyLine
 	sprite         *Sprite
-	triangle       float64
-	fudged         float64
-	fudge          int
 }
 
 // the ripple pattern is used to perturb the radius of a spiral to make it look
@@ -29,36 +25,27 @@ type Spiral struct {
 var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
 
 // NewSpiral creates a new spiral.
-func NewSpiral(depth int, points int, p *Palette, cycles int) *Spiral {
-	s := &Spiral{Depth: depth, Length: points, triangle: float64(((points * points) + points) / 2)}
-	s.Fudge(0)
+func NewSpiral(depth int, points int, p *Palette, cycles int, offset int) *Spiral {
+	s := &Spiral{Depth: depth, Length: points}
 	s.Palette = p.Interpolate(s.Length / (p.Length * cycles))
 	for i := 0; i < depth; i++ {
 		l := NewPolyLine(s.Palette, 3)
 		l.Thickness = 3
+		l.Joined = true
+		l.Blend = true
 		l.Points = make([]LinePoint, s.Length)
 		for j := 0; j < s.Length; j++ {
-			l.Points[j].P = s.Palette.Paint(j)
+			l.Points[j].P = s.Palette.Paint(j + offset)
 		}
 		s.pl = append(s.pl, l)
 	}
 	return s
 }
 
-// Fudge increases/decreases the fudge factor, used for debugging.
-func (s *Spiral) Fudge(fudge int) {
-	if s.fudge+fudge >= 0 {
-		s.fudge += fudge
-		s.fudged = s.triangle + float64(s.Length*s.fudge)
-		fmt.Printf("new fudge: %d\n", s.fudge)
-	}
-}
-
 // Draw draws the spiral on the specified image.
 func (s *Spiral) Draw(target *ebiten.Image) {
 	for i := 0; i < s.Depth; i += s.Step {
 		s.pl[i].Draw(target, (float64(i)+1)/float64(s.Depth))
-		// s.pl[i].Draw(target, 1.0)
 	}
 }
 
@@ -85,11 +72,11 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	pt.X, pt.Y = s.Center.Loc.X, s.Center.Loc.Y
 	pt = pl.Point(s.Length - 1)
 	pt.X, pt.Y = s.Target.Loc.X, s.Target.Loc.Y
-	counter := s.Length + s.fudge
+	counter := 1
 	for i := 1; i < s.Length-1; i++ {
 		pt := pl.Point(i)
-		sin, cos := math.Sincos((float64(counter)*s.Theta)/s.fudged + baseTheta)
-		counter += s.Length - i + s.fudge
+		sin, cos := math.Sincos((float64(counter)*s.Theta)/float64(s.Length) + baseTheta)
+		counter += 1
 		r := float64(i) / float64(s.Length-1) * baseR
 		if ripples[i] != 0 {
 			r *= 1 + (0.03 * float64(ripples[i]))
@@ -104,6 +91,7 @@ func (s *Spiral) Compute(pl *PolyLine) {
 func (s *Spiral) Update() {
 	if s.Target.Update() {
 		s.Ripples = append(s.Ripples, s.Length)
+		s.Target.PerturbVelocity()
 	}
 	line := s.pl[0]
 	for i := 0; i < s.Depth-1; i++ {

@@ -1,6 +1,9 @@
 package g
 
-import "image"
+import (
+	"image"
+	"math/rand"
+)
 
 // A Point represents a location on-screen.
 type Point struct {
@@ -46,9 +49,28 @@ func moveCoordinate(x, dx float64, min, max int) (float64, float64, bool) {
 	return x, dx, bounce
 }
 
+// SetBounds sets the bounds of a point to range from {0, 0}
+// to {x, y}.
 func (m *MovingPoint) SetBounds(x, y int) {
 	m.Bounds.Min = image.Point{X: 0, Y: 0}
 	m.Bounds.Max = image.Point{X: x, Y: y}
+}
+
+// PerturbVelocity randomly increments or decrements the velocity
+// components.
+func (m *MovingPoint) PerturbVelocity() {
+	switch (rand.Intn(3)) {
+	case 0:
+		m.Velocity.X++
+	case 1:
+		m.Velocity.X--
+	}
+	switch (rand.Intn(3)) {
+	case 0:
+		m.Velocity.Y++
+	case 1:
+		m.Velocity.Y--
+	}
 }
 
 func (m *MovingPoint) Update() bool {
