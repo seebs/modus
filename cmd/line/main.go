@@ -112,7 +112,7 @@ func main() {
 		log.Fatal(err)
 	}
 	line = g.NewPolyLine(g.Palettes["rainbow"], 3)
-	line.Blend = false
+	line.Blend = true
 	line.Add(100, 100, 0)
 	line.Add(400, 100, 0)
 	line.Add(600, 100, 3)
