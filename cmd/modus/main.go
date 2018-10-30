@@ -10,8 +10,8 @@ import (
 	"math/rand"
 	"os"
 	"runtime/pprof"
-	"time"
 	"seebs.net/modus/g"
+	"time"
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -37,6 +37,7 @@ var (
 	ty       = 240
 	dtx      = 0
 	dty      = 1
+	voice    *Voice
 )
 
 var knightMoves = []g.Mov{
@@ -132,8 +133,10 @@ func update(screen *ebiten.Image) error {
 		}
 	}
 	if !pause || released(ebiten.KeyRight) {
-		for _, s := range spirals {
-			s.Update()
+		for idx, s := range spirals {
+			if bounced, note := s.Update(); bounced {
+				voice.Play(note+5*idx, 90)
+			}
 		}
 	}
 	for _, s := range spirals {
@@ -148,17 +151,33 @@ func update(screen *ebiten.Image) error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "ps#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "mps#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
 	}
 	if opts.Seen("p") {
-		f, err := os.Create("profile.dat")
+		f, err := os.Create("cpu-profile.dat")
 		if err != nil {
-			log.Fatalf("can't create profile.dat: %s", err)
+			log.Fatalf("can't create cpu-profile.dat: %s", err)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
+	}
+	if opts.Seen("m") {
+		defer func() {
+			f, err := os.Create("heap-profile.dat")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "can't create heap-profile.dat: %s", err)
+			} else {
+				pprof.Lookup("heap").WriteTo(f, 0)
+			}
+			f, err = os.Create("alloc-profile.dat")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "can't create alloc-profile.dat: %s", err)
+			} else {
+				pprof.Lookup("allocs").WriteTo(f, 0)
+			}
+		}()
 	}
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
@@ -178,15 +197,16 @@ func main() {
 	g.NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
 	g.NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
 	for i := 0; i < 3; i++ {
-		spiral := g.NewSpiral(11, 800, g.Palettes["rainbow"], 3, i * 2)
+		spiral := g.NewSpiral(11, 400, g.Palettes["rainbow"], 3, i*2)
 		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
-		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64() * 30 - 15, Y: rand.Float64() * 30 - 15}}
+		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64()*30 - 15, Y: rand.Float64()*30 - 15}}
 		spiral.Target.SetBounds(screenWidth, screenHeight)
 		spiral.Theta = 8 * math.Pi
 		spiral.Step = 2
 		spirals = append(spirals, spiral)
 	}
-	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
+	voice, err = NewVoice("breath", 8)
+	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }

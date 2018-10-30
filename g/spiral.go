@@ -96,8 +96,11 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	// degenerate cases
 	pt := pl.Point(0)
 	pt.X, pt.Y = s.Center.Loc.X, s.Center.Loc.Y
+	pt.P = s.Palette.Inc(pt.P, 1)
+
 	pt = pl.Point(s.Length - 1)
 	pt.X, pt.Y = s.Target.Loc.X, s.Target.Loc.Y
+	pt.P = s.Palette.Inc(pt.P, 1)
 	for i := 1; i < s.Length-1; i++ {
 		pt := pl.Point(i)
 		sin, cos := math.Sincos((s.thetas[i]/s.scaleTheta)*s.Theta + baseTheta)
@@ -107,15 +110,17 @@ func (s *Spiral) Compute(pl *PolyLine) {
 		}
 		x, y := (cos*r)+s.Center.Loc.X, (sin*r)+s.Center.Loc.Y
 		pt.X, pt.Y = x, y
+		pt.P = s.Palette.Inc(pt.P, 1)
 	}
-
 }
 
 // Update moves the target according to its velocity, possibly adding a ripple.
-func (s *Spiral) Update() {
+func (s *Spiral) Update() (bounced bool, note int) {
 	if s.Target.Update() {
 		s.Ripples = append(s.Ripples, s.Length)
 		s.Target.PerturbVelocity()
+		bounced = true
+		note = (int(s.pl[0].Point(0).P) * 6) / (s.Palette.Length)
 	}
 	line := s.pl[0]
 	for i := 0; i < s.Depth-1; i++ {
@@ -123,4 +128,5 @@ func (s *Spiral) Update() {
 	}
 	s.pl[s.Depth-1] = line
 	s.Compute(line)
+	return bounced, note
 }
