@@ -10,8 +10,9 @@ import (
 	"math/rand"
 	"os"
 	"runtime/pprof"
-	"seebs.net/modus/g"
 	"time"
+
+	"seebs.net/modus/g"
 
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -73,37 +74,58 @@ func squareAt(screen *ebiten.Image, x, y int) {
 var lagCounter = 0
 var pause = false
 
-var keyStates [ebiten.KeyMax]byte
-
+// handle keypresses
 const (
 	PRESS   = 0x01
 	RELEASE = 0x02
 	HOLD    = 0x03
 )
 
-func pressed(key ebiten.Key) bool {
-	return (keyStates[key] & HOLD) == PRESS
+type keyMap map[ebiten.Key]byte
+
+// State returns the current state of a key
+func (km keyMap) State(k ebiten.Key) byte {
+	if _, ok := km[k]; !ok {
+		km[k] = 0
+	}
+	return km[k] & HOLD
 }
 
-func released(key ebiten.Key) bool {
-	return (keyStates[key] & HOLD) == RELEASE
+func (km keyMap) Pressed(k ebiten.Key) bool {
+	return km.State(k) == PRESS
 }
 
-func held(key ebiten.Key) bool {
-	return (keyStates[key] & HOLD) == HOLD
+func (km keyMap) Released(k ebiten.Key) bool {
+	return km.State(k) == RELEASE
+}
+
+func (km keyMap) Held(k ebiten.Key) bool {
+	return km.State(k) == HOLD
+}
+
+func (km keyMap) Update() {
+	for i := range km {
+		state := byte(0)
+		if ebiten.IsKeyPressed(i) {
+			state = 1
+		}
+		km[i] = ((km[i] & 0x1) << 1) | state
+	}
+}
+
+var keys = keyMap{
+	ebiten.KeyQ:     0,
+	ebiten.KeySpace: 0,
+	ebiten.KeyRight: 0,
 }
 
 func update(screen *ebiten.Image) error {
-	for i := ebiten.Key(0); i < ebiten.KeyMax; i++ {
-		keyStates[i] = (keyStates[i] << 1)
-		if ebiten.IsKeyPressed(i) {
-			keyStates[i] |= 1
-		}
-	}
-	if released(ebiten.KeyQ) {
+	keys.Update()
+
+	if keys.Released(ebiten.KeyQ) {
 		return errors.New("quit requested")
 	}
-	if pressed(ebiten.KeySpace) {
+	if keys.Pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
 	k := &knights[knight]
@@ -132,7 +154,7 @@ func update(screen *ebiten.Image) error {
 			// screen.DrawImage(square, &op)
 		}
 	}
-	if !pause || released(ebiten.KeyRight) {
+	if !pause || keys.Released(ebiten.KeyRight) {
 		for idx, s := range spirals {
 			if bounced, note := s.Update(); bounced {
 				voice.Play(note+5*idx, 90)
