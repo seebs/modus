@@ -32,6 +32,7 @@ type PolyLine struct {
 	debug     *PolyLine
 	vertices  []ebiten.Vertex
 	indices   []uint16
+	dirty     bool
 }
 
 var lineTexture *ebiten.Image
@@ -178,6 +179,13 @@ var prevTheta float64
 func adjust(v *ebiten.Vertex, ux, uy, scale float64) {
 	v.DstX += float32(ux * scale)
 	v.DstY += float32(uy * scale)
+}
+
+// Dirty marks that a line's been changed in a way it may not easily
+// detect, such as modifying a point returned by pl.Point(). Otherwise
+// it won't recompute its vertex buffer.
+func (pl *PolyLine) Dirty() {
+	pl.dirty = true
 }
 
 func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices, indices int) {
@@ -424,15 +432,21 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 		thickness = 0.7
 	}
 	halfthick := thickness / 2
-	var vertices, indices int
-	if pl.Joined {
-		vertices, indices = pl.computeJoinedVertices(halfthick, alpha64)
-	} else {
-		vertices, indices = pl.computeUnjoinedVertices(halfthick, alpha64)
+	var vCount, iCount int
+	if pl.dirty {
+		if pl.Joined {
+			vCount, iCount = pl.computeJoinedVertices(halfthick, alpha64)
+		} else {
+			vCount, iCount = pl.computeUnjoinedVertices(halfthick, alpha64)
+		}
+		// trim to actually returned length
+		pl.vertices = pl.vertices[:vCount]
+		pl.indices = pl.indices[:iCount]
+		pl.dirty = false
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices[:vertices], pl.indices[:indices], lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 	if pl.debug != nil {
 		pl.debug.Draw(target, alpha64)
 	}
@@ -448,9 +462,11 @@ func (pl *PolyLine) Reset() {
 	if pl.Points != nil {
 		pl.Points = pl.Points[:0]
 	}
+	pl.Dirty()
 }
 
 // Point yields a given point within the line.
+// If you modify the point, it's on you to call pl.Dirty().
 func (pl *PolyLine) Point(i int) *LinePoint {
 	if i < 0 || i >= len(pl.Points) {
 		return nil
@@ -462,4 +478,5 @@ func (pl *PolyLine) Point(i int) *LinePoint {
 func (pl *PolyLine) Add(x, y float64, p Paint) {
 	pt := LinePoint{X: x, Y: y, P: p}
 	pl.Points = append(pl.Points, pt)
+	pl.Dirty()
 }

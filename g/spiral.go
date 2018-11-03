@@ -112,6 +112,7 @@ func (s *Spiral) Compute(pl *PolyLine) {
 		pt.X, pt.Y = x, y
 		pt.P = s.Palette.Inc(pt.P, 1)
 	}
+	pl.Dirty()
 }
 
 // Update moves the target according to its velocity, possibly adding a ripple.
