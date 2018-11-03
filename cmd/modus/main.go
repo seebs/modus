@@ -128,42 +128,34 @@ func update(screen *ebiten.Image) error {
 	if keys.Pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
-	k := &knights[knight]
-	*k = grid.Add(*k, knightMove())
-	grid.Inc(*k, 2)
-	grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, p *g.Paint) {
-		gr.Inc(l, 1)
-	})
-	knight = (knight + 1) % len(knights)
-	// grid.Draw(screen)
-	op := ebiten.DrawImageOptions{
-		SourceRect: &image.Rectangle{
-			Min: image.Point{0, 0},
-			Max: image.Point{32, 32},
-		},
-	}
 
-	for i := 0; i < 6; i++ {
-		for j := 0; j < 4; j++ {
-			g := ebiten.GeoM{}
-			g.Translate(-16, -16)
-			g.Scale(2, 2)
-			g.Rotate(float64(j) * math.Pi / 8)
-			g.Translate(64*float64(i)+32, 64*float64(j)+32)
-			op.GeoM = g
-			// screen.DrawImage(square, &op)
-		}
-	}
 	if !pause || keys.Released(ebiten.KeyRight) {
+		grid.Iterate(func(gr *g.Grid, l g.Loc, sq *g.Square) {
+			sq.IncAlpha(-0.001)
+		})
+		k := &knights[knight]
+		*k = grid.Add(*k, knightMove())
+		grid.IncP(*k, 2)
+		grid.IncAlpha(*k, 0.2)
+		grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, sq *g.Square) {
+			gr.IncP(l, 1)
+			sq.IncAlpha(0.1)
+		})
+
+		knight = (knight + 1) % len(knights)
 		for idx, s := range spirals {
 			if bounced, note := s.Update(); bounced {
 				voice.Play(note+5*idx, 90)
 			}
 		}
 	}
+
+	grid.Draw(screen)
+
 	for _, s := range spirals {
 		s.Draw(screen)
 	}
+
 	select {
 	case <-timedOut:
 		return errors.New("regular termination")
@@ -208,10 +200,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	grid = g.NewGrid(80, 60, square)
+	grid = g.NewGrid(40, 30, square)
 	grid.Palette = g.Palettes["rainbow"]
-	grid.Iterate(func(gr *g.Grid, l g.Loc, p *g.Paint) {
-		gr.Squares[l.X][l.Y] = gr.Palette.Paint(0)
+	grid.Iterate(func(gr *g.Grid, l g.Loc, p *g.Square) {
+		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(0)
 	})
 	for i := 0; i < 6; i++ {
 		knights = append(knights, grid.NewLoc())
