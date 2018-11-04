@@ -1,6 +1,7 @@
 package g
 
 import (
+	"image"
 	"math"
 	"math/rand"
 
@@ -15,6 +16,7 @@ type Grid struct {
 	Image         *ebiten.Image
 	vertices      []ebiten.Vertex
 	indices       []uint16
+	Source        image.Rectangle
 }
 
 // Square represents a single square, which has a color
@@ -54,8 +56,8 @@ type Mov struct {
 	X, Y int
 }
 
-func NewGrid(width, height int, image *ebiten.Image) Grid {
-	gr := Grid{Width: width, Height: height}
+func NewGrid(width, height int, image *ebiten.Image, source image.Rectangle) Grid {
+	gr := Grid{Width: width, Height: height, Source: source}
 	gr.Squares = make([][]Square, gr.Width)
 	gr.Image = image
 	for idx := range gr.Squares {
@@ -81,9 +83,11 @@ func NewGrid(width, height int, image *ebiten.Image) Grid {
 		// 0->1->2, 2->1->3
 		// baseVertices currently live in lines.go, but it's the same here.
 		gr.vertices = append(gr.vertices, baseVertices[0:4]...)
+		dx, dy := float32(gr.Source.Max.X-gr.Source.Min.X), float32(gr.Source.Max.Y-gr.Source.Min.Y)
+		ox, oy := float32(gr.Source.Min.X), float32(gr.Source.Min.Y)
 		for j := uint16(0); j < 4; j++ {
-			gr.vertices[offset+j].SrcX = gr.vertices[offset+j].SrcX*30 + 1
-			gr.vertices[offset+j].SrcY = gr.vertices[offset+j].SrcY*30 + 1
+			gr.vertices[offset+j].SrcX = gr.vertices[offset+j].SrcX*dx + ox
+			gr.vertices[offset+j].SrcY = gr.vertices[offset+j].SrcY*dy + oy
 		}
 		gr.indices = append(gr.indices,
 			offset+0, offset+1, offset+2,
