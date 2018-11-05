@@ -23,16 +23,17 @@ import (
 // that away and presenting a polyline interface is more
 // convenient.
 type PolyLine struct {
-	Points    []LinePoint
-	Thickness float64
-	Depth     int
-	Palette   *Palette
-	Blend     bool
-	Joined    bool // one segment per point past the first, rather than each pair a segment
-	debug     *PolyLine
-	vertices  []ebiten.Vertex
-	indices   []uint16
-	dirty     bool
+	Points     []LinePoint
+	Thickness  float64
+	Depth      int
+	Palette    *Palette
+	Blend      bool
+	Joined     bool // one segment per point past the first, rather than each pair a segment
+	DebugColor bool // use debug colors
+	debug      *PolyLine
+	vertices   []ebiten.Vertex
+	indices    []uint16
+	dirty      bool
 }
 
 var lineTexture *ebiten.Image
@@ -45,22 +46,29 @@ type LinePoint struct {
 }
 
 var (
-	initLineTexture sync.Once
+	initLineData sync.Once
+	debugColors  [][3]float32
 )
 
 // each depth from 0..3 gets a 16x16 box, of which it is the
 // 14x14 pixels in the middle
 //
 var (
-	depths = [4][14]byte{
-		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
-		{127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127},
-		{85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85},
-		{63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63},
+	depths = [4][16]byte{
+		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+		{127, 127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127, 127},
+		{85, 85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85, 85},
+		{63, 63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63, 63},
 	}
 )
 
-func createLineTexture() {
+func lineSetup() {
+	debugColors = make([][3]float32, 6)
+	rb := Palettes["rainbow"]
+	for i := 0; i < 6; i++ {
+		r, g, b, _ := rb.Float32(Paint(i))
+		debugColors[i] = [3]float32{r, g, b}
+	}
 	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
 	for depth := 0; depth < 4; depth++ {
 		offsetX := (depth%2)*16 + 1
@@ -68,23 +76,24 @@ func createLineTexture() {
 		offsetXf := float32(offsetX)
 		offsetYf := float32(offsetY)
 		scalef := float32(14)
-		for r := 0; r < 14; r++ {
+		for r := 0; r < 16; r++ {
 			v := depths[depth][r]
 			col := color.RGBA{v, v, v, v}
 			for c := 0; c < 14; c++ {
-				img.Set(offsetX+c, offsetY+r, col)
+				img.Set(offsetX+c, offsetY+r-1, col)
 			}
 		}
 		triVertices := make([]ebiten.Vertex, 6)
 		for i := 0; i < 6; i++ {
 			triVertices[i] = baseVertices[i]
-			triVertices[i].SrcX = offsetXf + triVertices[i].SrcX*scalef
+			// pull X in from the ends, so it doesn't dim at the ends.
+			triVertices[i].SrcX = offsetXf + 1 + triVertices[i].SrcX*(scalef-2)
 			triVertices[i].SrcY = offsetYf + triVertices[i].SrcY*scalef
 		}
 		baseVerticesByDepth = append(baseVerticesByDepth, triVertices)
 	}
 	var err error
-	lineTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterDefault)
+	lineTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterLinear)
 	if err != nil {
 		log.Fatal("couldn't create image: %s", err)
 	}
@@ -92,7 +101,7 @@ func createLineTexture() {
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
 func NewPolyLine(p *Palette, depth int) *PolyLine {
-	initLineTexture.Do(createLineTexture)
+	initLineData.Do(lineSetup)
 	if depth > 3 {
 		depth = 3
 	}
@@ -311,6 +320,11 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 		v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA = r1, g1, b1, alpha
 		v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
 		v[5].ColorR, v[5].ColorG, v[5].ColorB, v[5].ColorA = r1, g1, b1, alpha
+		if pl.DebugColor {
+			for i := 0; i < 6; i++ {
+				v[i].ColorR, v[i].ColorG, v[i].ColorB, v[i].ColorA = debugColors[i][0], debugColors[i][1], debugColors[i][2], 1.0
+			}
+		}
 
 		// add debugging segments
 		if pl.debug != nil && idx > 0 {
@@ -446,7 +460,7 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear})
 	if pl.debug != nil {
 		pl.debug.Draw(target, alpha64)
 	}
