@@ -137,14 +137,12 @@ func update(screen *ebiten.Image) error {
 		})
 		k := &knights[knight]
 		*k = grid.Add(*k, knightMove())
-		/*
-			grid.IncP(*k, 2)
-			grid.IncAlpha(*k, 0.2)
-			grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, sq *g.Square) {
-				gr.IncP(l, 1)
-				sq.IncAlpha(0.1)
-			})
-		*/
+		grid.IncP(*k, 2)
+		grid.IncAlpha(*k, 0.2)
+		grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, sq *g.Square) {
+			gr.IncP(l, 1)
+			sq.IncAlpha(0.1)
+		})
 
 		knight = (knight + 1) % len(knights)
 		for idx, s := range spirals {
@@ -155,7 +153,7 @@ func update(screen *ebiten.Image) error {
 	}
 
 	grid.Draw(screen)
-	g2.Draw(screen)
+	// g2.Draw(screen)
 
 	for _, s := range spirals {
 		s.Draw(screen)
@@ -209,9 +207,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	grid = g.NewGrid(4, 3, square, image.Rectangle{Min: image.Point{X: 132, Y: 4}, Max: image.Point{X: 250, Y: 122}})
+	grid = g.NewGrid(40, 30, 1)
 	grid.Palette = g.Palettes["rainbow"]
-	g2 = g.NewGrid(4, 3, hex, image.Rectangle{Min: image.Point{X: 1, Y: 1}, Max: image.Point{X: 255, Y: 255}})
+	g2 = g.NewGrid(80, 60, 2)
 	g2.Palette = g.Palettes["rainbow"]
 
 	grid.Iterate(func(gr *g.Grid, l g.Loc, p *g.Square) {

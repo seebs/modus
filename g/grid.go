@@ -1,7 +1,6 @@
 package g
 
 import (
-	"image"
 	"math"
 	"math/rand"
 
@@ -13,10 +12,10 @@ type Grid struct {
 	Width, Height int
 	Squares       [][]Square
 	Palette       *Palette
-	Image         *ebiten.Image
 	vertices      []ebiten.Vertex
 	indices       []uint16
-	Source        image.Rectangle
+	// not really a depth anymore; selects which of several textures to use
+	Depth int
 }
 
 // Square represents a single square, which has a color
@@ -56,10 +55,10 @@ type Mov struct {
 	X, Y int
 }
 
-func NewGrid(width, height int, image *ebiten.Image, source image.Rectangle) Grid {
-	gr := Grid{Width: width, Height: height, Source: source}
+func NewGrid(width, height int, depth int) Grid {
+	textureSetup()
+	gr := Grid{Width: width, Height: height, Depth: depth}
 	gr.Squares = make([][]Square, gr.Width)
-	gr.Image = image
 	for idx := range gr.Squares {
 		col := make([]Square, gr.Height)
 		gr.Squares[idx] = col
@@ -82,13 +81,8 @@ func NewGrid(width, height int, image *ebiten.Image, source image.Rectangle) Gri
 		//
 		// 0->1->2, 2->1->3
 		// baseVertices currently live in lines.go, but it's the same here.
-		gr.vertices = append(gr.vertices, baseVertices[0:4]...)
-		dx, dy := float32(gr.Source.Max.X-gr.Source.Min.X), float32(gr.Source.Max.Y-gr.Source.Min.Y)
-		ox, oy := float32(gr.Source.Min.X), float32(gr.Source.Min.Y)
-		for j := uint16(0); j < 4; j++ {
-			gr.vertices[offset+j].SrcX = gr.vertices[offset+j].SrcX*dx + ox
-			gr.vertices[offset+j].SrcY = gr.vertices[offset+j].SrcY*dy + oy
-		}
+		// fmt.Printf("sqVBD[%d]: len %d\n", gr.Depth, len(squareVerticesByDepth))
+		gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.Depth]...)
 		gr.indices = append(gr.indices,
 			offset+0, offset+1, offset+2,
 			offset+2, offset+1, offset+3)
@@ -199,5 +193,5 @@ func (gr *Grid) Draw(screen *ebiten.Image) {
 		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, sq.Alpha
 		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, sq.Alpha
 	})
-	screen.DrawTriangles(gr.vertices, gr.indices, gr.Image, op)
+	screen.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
 }

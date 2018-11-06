@@ -11,18 +11,16 @@ import (
 	"seebs.net/modus/g"
 
 	"github.com/hajimehoshi/ebiten"
-	"github.com/hajimehoshi/ebiten/ebitenutil"
 
 	"github.com/seebs/gogetopt"
 )
 
 const (
-	screenWidth  = 1280
-	screenHeight = 960
+	screenWidth  = 640
+	screenHeight = 480
 )
 
 var (
-	square   *ebiten.Image
 	op       = &ebiten.DrawImageOptions{}
 	line     *g.PolyLine
 	timedOut <-chan time.Time
@@ -69,6 +67,12 @@ func update(screen *ebiten.Image) error {
 	if pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
+	if held(ebiten.KeyF) {
+		theta += .01
+	}
+	if held(ebiten.KeyG) {
+		theta -= .01
+	}
 	if held(ebiten.KeyRight) {
 		theta += .01
 	}
@@ -78,10 +82,11 @@ func update(screen *ebiten.Image) error {
 	pt1 := line.Point(1)
 	pt2 := line.Point(2)
 	s, c := math.Sincos(theta)
-	pt2.X = pt1.X + (c * 200)
-	pt2.Y = pt1.Y + (s * 200)
+	pt2.X = pt1.X + (c * 100)
+	pt2.Y = pt1.Y + (s * 100)
 	pt3 := line.Point(3)
 	pt3.Y = pt2.Y
+	line.Dirty()
 	line.Draw(screen, 1.0)
 	select {
 	case <-timedOut:
@@ -107,20 +112,17 @@ func main() {
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
-	square, _, err = ebitenutil.NewImageFromFile("square.png", ebiten.FilterLinear)
-	if err != nil {
-		log.Fatal(err)
-	}
 	line = g.NewPolyLine(g.Palettes["rainbow"], 3)
 	line.Blend = true
-	line.Add(100, 100, 0)
-	line.Add(400, 100, 0)
-	line.Add(600, 100, 3)
-	line.Add(100, 100, 4)
-	line.Thickness = 80
+	// line.DebugColor = true
+	line.Add(50, 50, 0)
+	line.Add(200, 50, 0)
+	line.Add(300, 50, 3)
+	line.Add(50, 50, 4)
+	line.Thickness = 40
 	line.Joined = true
 
-	if err := ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
+	if err := ebiten.Run(update, screenWidth, screenHeight, 2, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }

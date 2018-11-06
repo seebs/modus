@@ -2,13 +2,9 @@ package g
 
 import (
 	"fmt"
-	"image"
-	"log"
 	"math"
 	"os"
 	"sync"
-
-	"image/color"
 
 	"github.com/hajimehoshi/ebiten"
 )
@@ -36,8 +32,6 @@ type PolyLine struct {
 	dirty      bool
 }
 
-var lineTexture *ebiten.Image
-
 // A LinePoint is one point in a PolyLine, containing both
 // a location and a Paint corresponding to the PolyLine's Palette.
 type LinePoint struct {
@@ -50,52 +44,13 @@ var (
 	debugColors  [][3]float32
 )
 
-// each depth from 0..3 gets a 16x16 box, of which it is the
-// 14x14 pixels in the middle
-//
-var (
-	depths = [4][16]byte{
-		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
-		{127, 127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127, 127},
-		{85, 85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85, 85},
-		{63, 63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63, 63},
-	}
-)
-
 func lineSetup() {
+	textureSetup()
 	debugColors = make([][3]float32, 6)
 	rb := Palettes["rainbow"]
 	for i := 0; i < 6; i++ {
 		r, g, b, _ := rb.Float32(Paint(i))
 		debugColors[i] = [3]float32{r, g, b}
-	}
-	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
-	for depth := 0; depth < 4; depth++ {
-		offsetX := (depth%2)*16 + 1
-		offsetY := (depth/2)*16 + 1
-		offsetXf := float32(offsetX)
-		offsetYf := float32(offsetY)
-		scalef := float32(14)
-		for r := 0; r < 16; r++ {
-			v := depths[depth][r]
-			col := color.RGBA{v, v, v, v}
-			for c := 0; c < 14; c++ {
-				img.Set(offsetX+c, offsetY+r-1, col)
-			}
-		}
-		triVertices := make([]ebiten.Vertex, 6)
-		for i := 0; i < 6; i++ {
-			triVertices[i] = baseVertices[i]
-			// pull X in from the ends, so it doesn't dim at the ends.
-			triVertices[i].SrcX = offsetXf + 1 + triVertices[i].SrcX*(scalef-2)
-			triVertices[i].SrcY = offsetYf + triVertices[i].SrcY*scalef
-		}
-		baseVerticesByDepth = append(baseVerticesByDepth, triVertices)
-	}
-	var err error
-	lineTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterLinear)
-	if err != nil {
-		log.Fatal("couldn't create image: %s", err)
 	}
 }
 
@@ -117,16 +72,6 @@ func (pl *PolyLine) Debug(enable bool) {
 		pl.debug = nil
 	}
 }
-
-var baseVertices = []ebiten.Vertex{
-	{SrcX: 0, SrcY: 0, ColorA: 1.0},   // prev + nx,ny
-	{SrcX: 0, SrcY: 1, ColorA: 1.0},   // prev - nx,ny
-	{SrcX: 1, SrcY: 0, ColorA: 1.0},   // next + nx,ny
-	{SrcX: 1, SrcY: 1, ColorA: 1.0},   // next - nx,ny
-	{SrcX: 0, SrcY: 0.5, ColorA: 1.0}, // prev
-	{SrcX: 1, SrcY: 0.5, ColorA: 1.0}, // next
-}
-var baseVerticesByDepth [][]ebiten.Vertex
 
 type LineBits struct {
 	dx, dy float64 // delta x, delta y
@@ -207,7 +152,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*6 {
-		fv := baseVerticesByDepth[pl.Depth]
+		fv := triVerticesByDepth[pl.Depth]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*6)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv...)
@@ -358,7 +303,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64) (vertice
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*4 {
-		fv := baseVerticesByDepth[pl.Depth]
+		fv := triVerticesByDepth[pl.Depth]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*4)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv[0:4]...)
@@ -460,7 +405,7 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear})
+	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterNearest})
 	if pl.debug != nil {
 		pl.debug.Draw(target, alpha64)
 	}
