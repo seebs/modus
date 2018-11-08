@@ -118,3 +118,15 @@ func (a *Affine) Rotate(theta float32) {
 func IdentityAffine() Affine {
 	return Affine{A: 1, D: 1}
 }
+
+// finds next power of 2, but only if n < 2^31, because
+// this is for texture sizes
+func npo2(n int) int {
+	n--
+	n |= n >> 1
+	n |= n >> 2
+	n |= n >> 4
+	n |= n >> 8
+	n |= n >> 16
+	return n + 1
+}
