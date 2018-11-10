@@ -10,7 +10,7 @@ import (
 // Grid represents a grid of squares.
 type Grid struct {
 	Width, Height int
-	Squares       [][]Square
+	Squares       [][]Cell
 	Palette       *Palette
 	vertices      []ebiten.Vertex
 	base          []ebiten.Vertex
@@ -19,17 +19,6 @@ type Grid struct {
 	render RenderType
 	ox, oy int
 	scale  float64 // actual size in pixels. integer plz.
-}
-
-// Square represents a single square, which has a color
-// understood in terms of the parent grid's palette, also
-// values for alpha, theta, and scale. Scale of 1 represents
-// squares which are directly touching.
-type Square struct {
-	P     Paint
-	Alpha float32
-	Theta float32
-	Scale float32
 }
 
 func (g *Grid) RandRow() int {
@@ -80,9 +69,9 @@ func newGrid(w int, r RenderType, sx, sy int) *Grid {
 		oy:     (sy - int(scale)*h) / 2,
 		base:   squareVerticesByDepth[r],
 	}
-	gr.Squares = make([][]Square, gr.Width)
+	gr.Squares = make([][]Cell, gr.Width)
 	for idx := range gr.Squares {
-		col := make([]Square, gr.Height)
+		col := make([]Cell, gr.Height)
 		gr.Squares[idx] = col
 		for j := range col {
 			// set alpha to opaque by default
@@ -113,7 +102,7 @@ func newGrid(w int, r RenderType, sx, sy int) *Grid {
 }
 
 // A GridFunc is a general callback for operations on the grid.
-type GridFunc func(gr *Grid, l Loc, s *Square)
+type GridFunc func(gr *Grid, l Loc, c *Cell)
 
 // Iterate runs fn on the entire grid.
 func (gr *Grid) Iterate(fn GridFunc) {
@@ -124,7 +113,7 @@ func (gr *Grid) Iterate(fn GridFunc) {
 	}
 }
 
-func (gr *Grid) At(l Loc) *Square {
+func (gr *Grid) At(l Loc) *Cell {
 	return &gr.Squares[l.X][l.Y]
 }
 
@@ -137,32 +126,8 @@ func (gr *Grid) IncAlpha(l Loc, a float32) {
 	gr.Squares[l.X][l.Y].IncAlpha(a)
 }
 
-func (sq *Square) IncAlpha(a float32) {
-	a += sq.Alpha
-	if a < 0 {
-		a = 0
-	}
-	if a > 1 {
-		a = 1
-	}
-	sq.Alpha = a
-}
-
 func (gr *Grid) IncTheta(l Loc, t float32) {
 	gr.Squares[l.X][l.Y].IncTheta(t)
-}
-
-func (sq *Square) IncTheta(t float32) {
-	t += sq.Theta
-	if t < 0 {
-		x := math.Ceil(math.Abs(float64(t)) / (math.Pi * 2))
-		t += float32(math.Pi * 2 * x)
-	}
-	if t > (math.Pi * 2) {
-		x := math.Floor(float64(t) / (math.Pi * 2))
-		t -= float32(math.Pi * 2 * x)
-	}
-	sq.Theta = t
 }
 
 // Neighbors runs fn on the nearby cells.
@@ -181,20 +146,20 @@ func (gr *Grid) Draw(target *ebiten.Image, scale float64) {
 	xscale := float32(w) / float32(gr.Width) / 2
 	yscale := float32(h) / float32(gr.Height) / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
-	gr.Iterate(func(gr *Grid, l Loc, sq *Square) {
+	gr.Iterate(func(gr *Grid, l Loc, c *Cell) {
 		offset := ((l.Y * gr.Width) + l.X) * 4
 		vs := gr.vertices[offset : offset+4]
 		// xscale and yscale are actually half the size of a default square.
 		// thus, dx/dy are the offsets (whether positive or negative) of
 		// the sides of the square, scaled appropriately for this individual
 		// square's scale.
-		dx, dy := xscale*sq.Scale, yscale*sq.Scale
+		dx, dy := xscale*c.Scale, yscale*c.Scale
 		// we want to be a half-square offset, and we have a half-square size,
 		// so X*2+1 => the center of square X.
 		ox, oy := xscale*(float32(l.X*2)+1), yscale*(float32(l.Y*2)+1)
-		if sq.Theta != 0 {
+		if c.Theta != 0 {
 			a := IdentityAffine()
-			a.Rotate(sq.Theta)
+			a.Rotate(c.Theta)
 			a.Scale(dx, dy)
 			a.E, a.F = ox, oy
 			vs[0].DstX, vs[0].DstY = a.Project(-1, 1)
@@ -209,11 +174,11 @@ func (gr *Grid) Draw(target *ebiten.Image, scale float64) {
 			vs[2].DstX, vs[2].DstY = ox-dx, oy+dy
 			vs[3].DstX, vs[3].DstY = ox+dx, oy+dy
 		}
-		r, g, b, _ := gr.Palette.Float32(sq.P)
-		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, sq.Alpha
-		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, sq.Alpha
-		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, sq.Alpha
-		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, sq.Alpha
+		r, g, b, _ := gr.Palette.Float32(c.P)
+		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, c.Alpha
+		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, c.Alpha
+		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, c.Alpha
+		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, c.Alpha
 	})
 	target.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
 }

@@ -26,6 +26,7 @@ const (
 var (
 	gctx     *g.Context
 	grid     *g.Grid
+	hg       *g.HexGrid
 	line     *g.PolyLine
 	spirals  []*g.Spiral
 	knights  []g.Loc
@@ -35,6 +36,7 @@ var (
 	ty       = 240
 	dtx      = 0
 	dty      = 1
+	num      = 20
 	voice    *Voice
 )
 
@@ -125,16 +127,16 @@ func update(screen *ebiten.Image) error {
 	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
-		grid.Iterate(func(gr *g.Grid, l g.Loc, sq *g.Square) {
-			sq.IncAlpha(-0.001)
+		grid.Iterate(func(gr *g.Grid, l g.Loc, c *g.Cell) {
+			c.IncAlpha(-0.001)
 		})
 		k := &knights[knight]
 		*k = grid.Add(*k, knightMove())
 		grid.IncP(*k, 2)
 		grid.IncAlpha(*k, 0.2)
-		grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, sq *g.Square) {
+		grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, c *g.Cell) {
 			gr.IncP(l, 1)
-			sq.IncAlpha(0.1)
+			c.IncAlpha(0.1)
 		})
 
 		knight = (knight + 1) % len(knights)
@@ -146,7 +148,8 @@ func update(screen *ebiten.Image) error {
 	}
 
 	gctx.Render(screen, func(t *ebiten.Image, scale float64) {
-		grid.Draw(t, scale)
+		//grid.Draw(t, scale)
+		hg.Draw(t, scale)
 		for _, s := range spirals {
 			s.Draw(t, scale)
 		}
@@ -161,7 +164,7 @@ func update(screen *ebiten.Image) error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "ampqs#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pqs#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
 	}
@@ -175,6 +178,9 @@ func main() {
 	}
 	if opts.Seen("q") {
 		sound = false
+	}
+	if opts.Seen("n") {
+		num = opts["n"].Int
 	}
 	if opts.Seen("m") {
 		defer func() {
@@ -198,15 +204,17 @@ func main() {
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
 	grid = gctx.NewGrid(40, 1)
 	grid.Palette = g.Palettes["rainbow"]
+	hg = gctx.NewHexGrid(num, 1)
+	hg.Palette = g.Palettes["rainbow"]
 
-	grid.Iterate(func(gr *g.Grid, l g.Loc, p *g.Square) {
+	grid.Iterate(func(gr *g.Grid, l g.Loc, c *g.Cell) {
 		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
 	})
 	for i := 0; i < 6; i++ {
 		knights = append(knights, grid.NewLoc())
 	}
 	for i := 0; i < 3; i++ {
-		spiral := gctx.NewSpiral(11, 3, 400, g.Palettes["rainbow"], 1, i*2)
+		spiral := gctx.NewSpiral(11, 1, 400, g.Palettes["rainbow"], 3, i*2)
 		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
 		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64()*30 - 15, Y: rand.Float64()*30 - 15}}
 		spiral.Target.SetBounds(screenWidth, screenHeight)

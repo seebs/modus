@@ -1,7 +1,6 @@
 package g
 
 import (
-	"fmt"
 	"image"
 	"log"
 	"math"
@@ -95,6 +94,19 @@ var (
 			{radius: 0.625, value: 96},
 		},
 	}
+	baseHexDests = [2][][2]float32{
+		{
+			{1.5, -hexHeightScale},
+			{0, -2 * hexHeightScale},
+			{-1.5, -hexHeightScale},
+		},
+		{
+			{-1.5, hexHeightScale},
+			{0, -2 * hexHeightScale},
+			{1.5, hexHeightScale},
+		},
+	}
+	hexDests [][][2]float32
 	// the height of the flat side of the hex, from the center
 	hexHeightScale = float32(math.Sqrt(3) / 2)
 	// hexHeight is the offset we'll actually use, just so it's a consistent
@@ -240,7 +252,7 @@ func createTextures() {
 		// fmt.Printf("n = %d: aRow [%d+2x%d+2]: %d, aCol [%d+2x%d+2]: %d", n, nCols, rows+1, aRow, cols+1, nRows, aCol)
 		if aRow == aCol {
 			// favor squares as tiebreaker
-			if rows > cols {
+			if float32(rows)*hexHeightScale > float32(cols) {
 				aRow++
 			} else {
 				aCol++
@@ -260,7 +272,7 @@ func createTextures() {
 	// +2px offset per
 	hexW := npo2(hexTextureWidth(cols) + 2)
 	hexH := npo2(hexTextureHeight(rows) + 2)
-	fmt.Printf("total texture size: %d x %d => %d x %d\n", cols, rows, hexW, hexH)
+	// fmt.Printf("total texture size: %d x %d => %d x %d\n", cols, rows, hexW, hexH)
 
 	// create hexTexture now, but it won't actually be populated yet.
 	hexTexture, err = ebiten.NewImage(hexW, hexH, ebiten.FilterLinear)
@@ -271,25 +283,30 @@ func createTextures() {
 	// Populate base vertices. actual rendering happens later when the user
 	// calls CreateHexTextures after ebiten is up.
 	hexVerticesByDepth = make([][]ebiten.Vertex, len(hexDepths))
+
 	for depth := 0; depth < len(hexDepths); depth++ {
+		var hd [][2]float32
 		vs := make([]ebiten.Vertex, 0, 3)
 		row, col := depth/hexCols, depth%hexCols
 		// the top-left point of a down-pointing triangle around the hex
 		ox, oy := hexTextureXOffset(col), hexTextureYOffset(row)
 		if col&1 != 0 {
+			hd = baseHexDests[1]
 			// up-pointing triangle
-			vs = append(vs, ebiten.Vertex{DstX: -1.5, DstY: hexHeightScale, SrcX: float32(ox), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
-			vs = append(vs, ebiten.Vertex{DstX: 0, DstY: -2 * hexHeightScale, SrcX: float32(ox + (3*hexRadius)/2), SrcY: float32(oy), ColorA: 1})
-			vs = append(vs, ebiten.Vertex{DstX: 1.5, DstY: hexHeightScale, SrcX: float32(ox + 3*hexRadius), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[0][0], DstY: hd[0][1], SrcX: float32(ox), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[1][0], DstY: hd[1][1], SrcX: float32(ox + (3*hexRadius)/2), SrcY: float32(oy), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[2][0], DstY: hd[2][1], SrcX: float32(ox + 3*hexRadius), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
 		} else {
+			hd = baseHexDests[0]
 			// down-pointing triangle
-			vs = append(vs, ebiten.Vertex{DstX: 1.5, DstY: -hexHeightScale, SrcX: float32(ox), SrcY: float32(oy), ColorA: 1})
-			vs = append(vs, ebiten.Vertex{DstX: 0, DstY: 2 * hexHeightScale, SrcX: float32(ox + (3*hexRadius)/2), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
-			vs = append(vs, ebiten.Vertex{DstX: -1.5, DstY: -hexHeightScale, SrcX: float32(ox + 3*hexRadius), SrcY: float32(oy), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[0][0], DstY: hd[0][1], SrcX: float32(ox), SrcY: float32(oy), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[1][0], DstY: hd[1][1], SrcX: float32(ox + (3*hexRadius)/2), SrcY: float32(oy + 3*hexHeight), ColorA: 1})
+			vs = append(vs, ebiten.Vertex{DstX: hd[2][0], DstY: hd[2][1], SrcX: float32(ox + 3*hexRadius), SrcY: float32(oy), ColorA: 1})
 
 		}
-		fmt.Printf("hex depth %d [@%d,%d]: %d, %d\n", depth, col, row, ox, oy)
+		// fmt.Printf("hex depth %d [@%d,%d]: %d, %d\n", depth, col, row, ox, oy)
 		hexVerticesByDepth[depth] = vs
+		hexDests = append(hexDests, hd)
 	}
 
 	solidTexture, err = ebiten.NewImage(16, 16, ebiten.FilterDefault)

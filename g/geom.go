@@ -102,16 +102,18 @@ func (a Affine) Unproject(x1, y1 float32) (x0, y0 float32) {
 }
 
 // Scale scales by X and Y.
-func (a *Affine) Scale(xs, ys float32) {
+func (a *Affine) Scale(xs, ys float32) *Affine {
 	a.A, a.C, a.E = a.A*xs, a.C*xs, a.E*xs
 	a.B, a.D, a.F = a.B*ys, a.D*ys, a.F*ys
+	return a
 }
 
 // Rotate rotates by an angle.
-func (a *Affine) Rotate(theta float32) {
+func (a *Affine) Rotate(theta float32) *Affine {
 	s64, c64 := math.Sincos(float64(theta))
 	s, c := float32(s64), float32(c64)
-	a.A, a.B, a.C, a.D, a.E, a.F = a.A*c+a.C*s, a.B*c+a.D*s, a.C*c-a.A*s, a.D*c-a.B*s, a.E, a.F
+	a.A, a.B, a.C, a.D = a.A*c+a.C*s, a.B*c+a.D*s, a.C*c-a.A*s, a.D*c-a.B*s
+	return a
 }
 
 // IdentityAffine yields the identity matrix.
