@@ -21,7 +21,7 @@ import (
 type PolyLine struct {
 	Points     []LinePoint
 	Thickness  float64
-	Depth      int
+	render     RenderType
 	Palette    *Palette
 	Blend      bool
 	Joined     bool // one segment per point past the first, rather than each pair a segment
@@ -55,18 +55,18 @@ func lineSetup() {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func NewPolyLine(p *Palette, depth int) *PolyLine {
+func newPolyLine(p *Palette, r RenderType, thickness int) *PolyLine {
 	initLineData.Do(lineSetup)
-	if depth > 3 {
-		depth = 3
+	if r > 3 {
+		r = 3
 	}
-	pl := &PolyLine{Palette: p, Depth: depth, Blend: true}
+	pl := &PolyLine{Palette: p, render: r, Blend: true, Thickness: float64(thickness)}
 	return pl
 }
 
 func (pl *PolyLine) Debug(enable bool) {
 	if enable {
-		pl.debug = NewPolyLine(pl.Palette, 1)
+		pl.debug = newPolyLine(pl.Palette, 1, 2)
 		pl.debug.Thickness = 2
 	} else {
 		pl.debug = nil
@@ -142,8 +142,9 @@ func (pl *PolyLine) Dirty() {
 	pl.dirty = true
 }
 
-func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices, indices int) {
+func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64, scale64 float64) (vertices, indices int) {
 	alpha := float32(alpha64)
+	scale := float32(scale64)
 	segments := len(pl.Points) - 1
 	if segments < 1 {
 		// fail
@@ -152,7 +153,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*6 {
-		fv := triVerticesByDepth[pl.Depth]
+		fv := triVerticesByDepth[pl.render]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*6)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv...)
@@ -206,16 +207,16 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 		offset := uint16(count * 6)
 		v := pl.vertices[offset : offset+6]
 		// populate these with default values, which we'd use without the fancy algorithm
-		v[0].DstX = float32(prev.X + lb.nx*halfthick)
-		v[0].DstY = float32(prev.Y + lb.ny*halfthick)
-		v[1].DstX = float32(prev.X - lb.nx*halfthick)
-		v[1].DstY = float32(prev.Y - lb.ny*halfthick)
-		v[2].DstX = float32(next.X + lb.nx*halfthick)
-		v[2].DstY = float32(next.Y + lb.ny*halfthick)
-		v[3].DstX = float32(next.X - lb.nx*halfthick)
-		v[3].DstY = float32(next.Y - lb.ny*halfthick)
-		v[4].DstX, v[4].DstY = float32(prev.X), float32(prev.Y)
-		v[5].DstX, v[5].DstY = float32(next.X), float32(next.Y)
+		v[0].DstX = float32(prev.X+lb.nx*halfthick) * scale
+		v[0].DstY = float32(prev.Y+lb.ny*halfthick) * scale
+		v[1].DstX = float32(prev.X-lb.nx*halfthick) * scale
+		v[1].DstY = float32(prev.Y-lb.ny*halfthick) * scale
+		v[2].DstX = float32(next.X+lb.nx*halfthick) * scale
+		v[2].DstY = float32(next.Y+lb.ny*halfthick) * scale
+		v[3].DstX = float32(next.X-lb.nx*halfthick) * scale
+		v[3].DstY = float32(next.Y-lb.ny*halfthick) * scale
+		v[4].DstX, v[4].DstY = float32(prev.X)*scale, float32(prev.Y)*scale
+		v[5].DstX, v[5].DstY = float32(next.X)*scale, float32(next.Y)*scale
 		if plb.l > 0 {
 			// fix up the overlap between these lines
 			theta := lb.theta
@@ -293,8 +294,9 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64) (vertices,
 
 // The easy case: We compute four vertices per segment,
 // and draw two triangles using them, giving us an easy quad.
-func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64) (vertices, indices int) {
+func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64, scale64 float64) (vertices, indices int) {
 	alpha := float32(alpha64)
+	scale := float32(scale64)
 	segments := len(pl.Points) / 2
 	if segments < 1 {
 		// fail
@@ -303,7 +305,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64) (vertice
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*4 {
-		fv := triVerticesByDepth[pl.Depth]
+		fv := triVerticesByDepth[pl.render]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*4)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv[0:4]...)
@@ -344,14 +346,14 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64) (vertice
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
 		offset := uint16(count * 4)
 		v := pl.vertices[offset : offset+4]
-		v[0].DstX = float32(prev.X + lb.nx*halfthick)
-		v[0].DstY = float32(prev.Y + lb.ny*halfthick)
-		v[1].DstX = float32(prev.X - lb.nx*halfthick)
-		v[1].DstY = float32(prev.Y - lb.ny*halfthick)
-		v[2].DstX = float32(next.X + lb.nx*halfthick)
-		v[2].DstY = float32(next.Y + lb.ny*halfthick)
-		v[3].DstX = float32(next.X - lb.nx*halfthick)
-		v[3].DstY = float32(next.Y - lb.ny*halfthick)
+		v[0].DstX = float32(prev.X+lb.nx*halfthick) * scale
+		v[0].DstY = float32(prev.Y+lb.ny*halfthick) * scale
+		v[1].DstX = float32(prev.X-lb.nx*halfthick) * scale
+		v[1].DstY = float32(prev.Y-lb.ny*halfthick) * scale
+		v[2].DstX = float32(next.X+lb.nx*halfthick) * scale
+		v[2].DstY = float32(next.Y+lb.ny*halfthick) * scale
+		v[3].DstX = float32(next.X-lb.nx*halfthick) * scale
+		v[3].DstY = float32(next.Y-lb.ny*halfthick) * scale
 		if pl.Blend {
 			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
 			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
@@ -384,7 +386,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64) (vertice
 
 // Draw renders the line on the target, using the sprite's drawimage
 // options modified by color and location of line segments.
-func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
+func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64, scale float64) {
 	thickness := pl.Thickness
 	// no invisible lines plz
 	if thickness == 0 {
@@ -394,9 +396,9 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	var vCount, iCount int
 	if pl.dirty {
 		if pl.Joined {
-			vCount, iCount = pl.computeJoinedVertices(halfthick, alpha64)
+			vCount, iCount = pl.computeJoinedVertices(halfthick, alpha64, scale)
 		} else {
-			vCount, iCount = pl.computeUnjoinedVertices(halfthick, alpha64)
+			vCount, iCount = pl.computeUnjoinedVertices(halfthick, alpha64, scale)
 		}
 		// trim to actually returned length
 		pl.vertices = pl.vertices[:vCount]
@@ -405,9 +407,9 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64) {
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterNearest})
+	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 	if pl.debug != nil {
-		pl.debug.Draw(target, alpha64)
+		pl.debug.Draw(target, alpha64, scale)
 	}
 }
 

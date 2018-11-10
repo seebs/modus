@@ -12,6 +12,7 @@ type Spiral struct {
 	Center, Target MovingPoint
 	Theta          float64
 	Depth          int
+	render         RenderType
 	Length         int
 	Step           int // step 1 = draw every line, step 2 = draw every other line
 	Palette        *Palette
@@ -28,9 +29,9 @@ type Spiral struct {
 var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
 var defaultThetaRatio = 4.0
 
-// NewSpiral creates a new spiral.
-func NewSpiral(depth int, points int, p *Palette, cycles int, offset int) *Spiral {
-	s := &Spiral{Depth: depth, Length: points}
+// newSpiral creates a new spiral.
+func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int) *Spiral {
+	s := &Spiral{Depth: depth, render: r, Length: points}
 	// we want to make it through the palette cycles times; for instance,
 	// if cycles is 3, we want a total of 18 color shifts, divided among
 	// s.Length segments, so that's the interpolation scale.
@@ -41,9 +42,8 @@ func NewSpiral(depth int, points int, p *Palette, cycles int, offset int) *Spira
 	// scale theta: inner points get thetaRatio times as much theta as outer points
 	s.thetas = make([]float64, s.Length)
 	s.SetThetaRatio(defaultThetaRatio)
-	for i := 0; i < depth; i++ {
-		l := NewPolyLine(s.Palette, 3)
-		l.Thickness = 3
+	for i := 0; i < s.Depth; i++ {
+		l := newPolyLine(s.Palette, r, 3)
 		l.Joined = true
 		l.Blend = true
 		l.Points = make([]LinePoint, s.Length)
@@ -69,9 +69,9 @@ func (s *Spiral) SetThetaRatio(ratio float64) {
 }
 
 // Draw draws the spiral on the specified image.
-func (s *Spiral) Draw(target *ebiten.Image) {
+func (s *Spiral) Draw(target *ebiten.Image, scale float64) {
 	for i := 0; i < s.Depth; i += s.Step {
-		s.pl[i].Draw(target, (float64(i)+1)/float64(s.Depth))
+		s.pl[i].Draw(target, (float64(i)+1)/float64(s.Depth), scale)
 	}
 }
 

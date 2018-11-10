@@ -23,7 +23,7 @@ type hexDepth struct {
 }
 
 const (
-	hexRadius = 32
+	hexRadius = 72
 )
 
 var (
@@ -73,26 +73,26 @@ var (
 		},
 		[]hexDepth{
 			{radius: 1, value: 192},
-			{radius: 0.9, value: 220},
+			{radius: 0.875, value: 220},
 		},
 		[]hexDepth{
 			{radius: 1, value: 220},
-			{radius: 0.9, value: 192},
-			{radius: 0.8, value: 128},
-			{radius: 0.7, value: 96},
+			{radius: 0.875, value: 0},
+			{radius: 0.75, value: 128},
+			{radius: 0.625, value: 96},
 		},
 		[]hexDepth{
 			{radius: 1, value: 128},
 		},
 		[]hexDepth{
 			{radius: 1, value: 192},
-			{radius: 0.9, value: 220},
+			{radius: 0.875, value: 220},
 		},
 		[]hexDepth{
 			{radius: 1, value: 220},
-			{radius: 0.9, value: 192},
-			{radius: 0.8, value: 128},
-			{radius: 0.7, value: 96},
+			{radius: 0.875, value: 192},
+			{radius: 0.75, value: 128},
+			{radius: 0.625, value: 96},
 		},
 	}
 	// the height of the flat side of the hex, from the center
@@ -258,12 +258,12 @@ func createTextures() {
 	}
 	hexRows, hexCols = rows, cols
 	// +2px offset per
-	hexW := hexTextureWidth(cols) + 2
-	hexH := hexTextureHeight(rows) + 2
+	hexW := npo2(hexTextureWidth(cols) + 2)
+	hexH := npo2(hexTextureHeight(rows) + 2)
 	fmt.Printf("total texture size: %d x %d => %d x %d\n", cols, rows, hexW, hexH)
 
 	// create hexTexture now, but it won't actually be populated yet.
-	hexTexture, err = ebiten.NewImage(hexW, hexH, ebiten.FilterDefault)
+	hexTexture, err = ebiten.NewImage(hexW, hexH, ebiten.FilterLinear)
 
 	if err != nil {
 		log.Fatalf("couldn't create image: %s", err)
@@ -306,18 +306,24 @@ func CreateHexTextures() {
 }
 
 func createHexTextures() {
+	w, h := hexTexture.Size()
+	hexTex2x, _ := ebiten.NewImage(w*2, h*2, ebiten.FilterLinear)
 	for depth, depths := range hexDepths {
 		row, col := depth/hexCols, depth%hexCols
 		// the top-left point of a down-pointing triangle around the hex
-		ox, oy := hexTextureXOffset(col), hexTextureYOffset(row)
+		ox, oy := hexTextureXOffset(col)*2, hexTextureYOffset(row)*2
 		if col&1 != 0 {
-			oy += int(hexHeight)
+			oy += int(hexHeight) * 2
 		}
 		for _, hd := range depths {
-			drawHexAround(ox+(hexRadius*3)/2, oy+hexHeight, hd.radius, hd.value, hexTexture)
+			drawHexAround(ox+(hexRadius*3), oy+hexHeight*2, hd.radius, hd.value, hexTex2x)
 		}
 		// fmt.Printf("hex depth %d [@%d,%d]: %d, %d\n", depth, col, row, ox, oy)
 	}
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(0.5, 0.5)
+	hexTexture.DrawImage(hexTex2x, op)
+	hexTex2x.Dispose()
 }
 
 var hexOffsets = [][2]float32{

@@ -15,10 +15,10 @@ func NewHexGrid(depth int) *HexGrid {
 func (h *HexGrid) Draw(screen *ebiten.Image) {
 	textureSetup()
 	CreateHexTextures()
-	// o2 := &ebiten.DrawImageOptions{}
-	// o2.GeoM.Reset()
-	// o2.GeoM.Translate(128, 32)
-	// screen.DrawImage(hexTexture, o2)
+	o2 := &ebiten.DrawImageOptions{}
+	o2.GeoM.Reset()
+	o2.GeoM.Translate(128, 32)
+	screen.DrawImage(hexTexture, o2)
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear}
 	vs := make([]ebiten.Vertex, 0)
 	ix := make([]uint16, 0)
@@ -30,8 +30,8 @@ func (h *HexGrid) Draw(screen *ebiten.Image) {
 		tri := vs[oldL : oldL+3]
 		for j := 0; j < 3; j++ {
 			tri[j].ColorR, tri[j].ColorG, tri[j].ColorB = r, g, b
-			tri[j].DstX = tri[j].DstX*32 + ox
-			tri[j].DstY = tri[j].DstY*32 + oy
+			tri[j].DstX = tri[j].DstX*24 + ox
+			tri[j].DstY = tri[j].DstY*24 + oy
 		}
 		ix = append(ix, oldL, oldL+1, oldL+2)
 	}

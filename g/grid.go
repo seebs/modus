@@ -13,9 +13,12 @@ type Grid struct {
 	Squares       [][]Square
 	Palette       *Palette
 	vertices      []ebiten.Vertex
+	base          []ebiten.Vertex
 	indices       []uint16
 	// not really a depth anymore; selects which of several textures to use
-	Depth int
+	render RenderType
+	ox, oy int
+	scale  float64 // actual size in pixels. integer plz.
 }
 
 // Square represents a single square, which has a color
@@ -55,9 +58,28 @@ type Mov struct {
 	X, Y int
 }
 
-func NewGrid(width, height int, depth int) Grid {
+func newGrid(w int, r RenderType, sx, sy int) *Grid {
+	var h int
+	var scale float64
+	if sx > sy {
+		scale = math.Floor(float64(sx) / float64(w))
+		h = int(math.Floor(float64(sy) / scale))
+	} else {
+		// compute sizes for portrait mode, then flip x and y
+		scale = math.Floor(float64(sy) / float64(w))
+		h = int(math.Floor(float64(sx) / scale))
+		w, h = h, w
+	}
 	textureSetup()
-	gr := Grid{Width: width, Height: height, Depth: depth}
+	gr := Grid{
+		Width:  w,
+		Height: h,
+		render: r,
+		scale:  scale,
+		ox:     (sx - int(scale)*w) / 2,
+		oy:     (sy - int(scale)*h) / 2,
+		base:   squareVerticesByDepth[r],
+	}
 	gr.Squares = make([][]Square, gr.Width)
 	for idx := range gr.Squares {
 		col := make([]Square, gr.Height)
@@ -82,12 +104,12 @@ func NewGrid(width, height int, depth int) Grid {
 		// 0->1->2, 2->1->3
 		// baseVertices currently live in lines.go, but it's the same here.
 		// fmt.Printf("sqVBD[%d]: len %d\n", gr.Depth, len(squareVerticesByDepth))
-		gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.Depth]...)
+		gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.render]...)
 		gr.indices = append(gr.indices,
 			offset+0, offset+1, offset+2,
 			offset+2, offset+1, offset+3)
 	}
-	return gr
+	return &gr
 }
 
 // A GridFunc is a general callback for operations on the grid.
@@ -152,8 +174,8 @@ func (gr *Grid) Neighbors(l Loc, fn GridFunc) {
 }
 
 // Draw displays the grid on the target screen.
-func (gr *Grid) Draw(screen *ebiten.Image) {
-	w, h := screen.Size()
+func (gr *Grid) Draw(target *ebiten.Image, scale float64) {
+	w, h := target.Size()
 	// if xscale and yscale aren't identical, how should rotation work? well, at 90 degree rotations,
 	// we want the square to fit cleanly. so. rotate a theoretical unit square, then scale by {x, y}
 	xscale := float32(w) / float32(gr.Width) / 2
@@ -193,5 +215,5 @@ func (gr *Grid) Draw(screen *ebiten.Image) {
 		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, sq.Alpha
 		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, sq.Alpha
 	})
-	screen.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
+	target.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"image"
 	_ "image/png"
 	"log"
 	"math"
@@ -15,7 +14,6 @@ import (
 	"seebs.net/modus/g"
 
 	"github.com/hajimehoshi/ebiten"
-	"github.com/hajimehoshi/ebiten/ebitenutil"
 
 	"github.com/seebs/gogetopt"
 )
@@ -26,13 +24,10 @@ const (
 )
 
 var (
-	square   *ebiten.Image
-	hex      *ebiten.Image
-	op       = &ebiten.DrawImageOptions{}
-	grid     g.Grid
-	g2       g.Grid
-	spirals  []*g.Spiral
+	gctx     *g.Context
+	grid     *g.Grid
 	line     *g.PolyLine
+	spirals  []*g.Spiral
 	knights  []g.Loc
 	knight   int
 	timedOut <-chan time.Time
@@ -56,21 +51,6 @@ var knightMoves = []g.Mov{
 
 func knightMove() g.Mov {
 	return knightMoves[int(rand.Int31n(int32(len(knightMoves))))]
-}
-
-func squareAt(screen *ebiten.Image, x, y int) {
-	op := ebiten.DrawImageOptions{
-		SourceRect: &image.Rectangle{
-			Min: image.Point{0, 0},
-			Max: image.Point{32, 32},
-		},
-	}
-	geo := ebiten.GeoM{}
-	geo.Translate(-16, -16)
-	geo.Scale(0.5, 0.5)
-	geo.Translate(float64(x), float64(y))
-	op.GeoM = geo
-	screen.DrawImage(square, &op)
 }
 
 var lagCounter = 0
@@ -121,7 +101,20 @@ var keys = keyMap{
 	ebiten.KeyRight: 0,
 }
 
+var frames = 0
+var tps float64
+var tpsStarted bool
+var sound = true
+
 func update(screen *ebiten.Image) error {
+	cTPS := ebiten.CurrentTPS()
+	if cTPS > 0 {
+		tpsStarted = true
+	}
+	if tpsStarted {
+		tps += cTPS
+		frames++
+	}
 	keys.Update()
 
 	if keys.Released(ebiten.KeyQ) {
@@ -146,18 +139,18 @@ func update(screen *ebiten.Image) error {
 
 		knight = (knight + 1) % len(knights)
 		for idx, s := range spirals {
-			if bounced, note := s.Update(); bounced {
+			if bounced, note := s.Update(); bounced && sound {
 				voice.Play(note+5*idx, 90)
 			}
 		}
 	}
 
-	grid.Draw(screen)
-	// g2.Draw(screen)
-
-	for _, s := range spirals {
-		s.Draw(screen)
-	}
+	gctx.Render(screen, func(t *ebiten.Image, scale float64) {
+		grid.Draw(t, scale)
+		for _, s := range spirals {
+			s.Draw(t, scale)
+		}
+	})
 
 	select {
 	case <-timedOut:
@@ -168,7 +161,7 @@ func update(screen *ebiten.Image) error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "mps#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "ampqs#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
 	}
@@ -179,6 +172,9 @@ func main() {
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
+	}
+	if opts.Seen("q") {
+		sound = false
 	}
 	if opts.Seen("m") {
 		defer func() {
@@ -199,32 +195,18 @@ func main() {
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
-	square, _, err = ebitenutil.NewImageFromFile("square.png", ebiten.FilterLinear)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hex, _, err = ebitenutil.NewImageFromFile("hex2.png", ebiten.FilterLinear)
-	if err != nil {
-		log.Fatal(err)
-	}
-	grid = g.NewGrid(40, 30, 1)
+	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
+	grid = gctx.NewGrid(40, 1)
 	grid.Palette = g.Palettes["rainbow"]
-	g2 = g.NewGrid(80, 60, 2)
-	g2.Palette = g.Palettes["rainbow"]
 
 	grid.Iterate(func(gr *g.Grid, l g.Loc, p *g.Square) {
 		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
 	})
-	g2.Iterate(func(gr *g.Grid, l g.Loc, p *g.Square) {
-		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(2)
-	})
 	for i := 0; i < 6; i++ {
 		knights = append(knights, grid.NewLoc())
 	}
-	g.NewSprite("indented", square, image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 32, Y: 32}})
-	g.NewSprite("white", square, image.Rectangle{Min: image.Point{X: 32, Y: 0}, Max: image.Point{X: 64, Y: 32}})
 	for i := 0; i < 3; i++ {
-		spiral := g.NewSpiral(11, 400, g.Palettes["rainbow"], 3, i*2)
+		spiral := gctx.NewSpiral(11, 3, 400, g.Palettes["rainbow"], 1, i*2)
 		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
 		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64()*30 - 15, Y: rand.Float64()*30 - 15}}
 		spiral.Target.SetBounds(screenWidth, screenHeight)
@@ -234,6 +216,7 @@ func main() {
 	}
 	voice, err = NewVoice("breath", 8)
 	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
+		fmt.Fprintf(os.Stderr, "frames: %d, TPS %.2f\n", frames, tps/float64(frames))
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
 	}
 }
