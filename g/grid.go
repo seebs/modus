@@ -7,8 +7,8 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
-// Grid represents a grid of squares.
-type Grid struct {
+// SquareGrid represents a grid of squares.
+type SquareGrid struct {
 	Width, Height int
 	Squares       [][]Cell
 	Palette       *Palette
@@ -21,19 +21,19 @@ type Grid struct {
 	scale  float64 // actual size in pixels. integer plz.
 }
 
-func (g *Grid) RandRow() int {
+func (g *SquareGrid) RandRow() int {
 	return int(rand.Int31n(int32(g.Height)))
 }
 
-func (g *Grid) RandCol() int {
+func (g *SquareGrid) RandCol() int {
 	return int(rand.Int31n(int32(g.Width)))
 }
 
-func (g *Grid) NewLoc() Loc {
+func (g *SquareGrid) NewLoc() Loc {
 	return Loc{X: g.RandCol(), Y: g.RandRow()}
 }
 
-func (g *Grid) Add(l Loc, m Mov) Loc {
+func (g *SquareGrid) Add(l Loc, m Mov) Loc {
 	return Loc{X: (l.X + m.X + g.Width) % g.Width, Y: (l.Y + m.Y + g.Height) % g.Height}
 }
 
@@ -47,7 +47,7 @@ type Mov struct {
 	X, Y int
 }
 
-func newGrid(w int, r RenderType, sx, sy int) *Grid {
+func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 	var h int
 	var scale float64
 	if sx > sy {
@@ -60,7 +60,7 @@ func newGrid(w int, r RenderType, sx, sy int) *Grid {
 		w, h = h, w
 	}
 	textureSetup()
-	gr := Grid{
+	gr := SquareGrid{
 		Width:  w,
 		Height: h,
 		render: r,
@@ -101,11 +101,20 @@ func newGrid(w int, r RenderType, sx, sy int) *Grid {
 	return &gr
 }
 
-// A GridFunc is a general callback for operations on the grid.
-type GridFunc func(gr *Grid, l Loc, c *Cell)
+type Grid interface {
+	At(Loc) *Cell
+	IncP(Loc, int)
+	IncAlpha(Loc, float32)
+	IncTheta(Loc, float32)
+	Neighbors(Loc, GridFunc)
+	Iterate(GridFunc)
+}
+
+// A SquareGridFunc is a general callback for operations on the grid.
+type GridFunc func(gr Grid, l Loc, c *Cell)
 
 // Iterate runs fn on the entire grid.
-func (gr *Grid) Iterate(fn GridFunc) {
+func (gr *SquareGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Squares {
 		for j := range col {
 			fn(gr, Loc{X: i, Y: j}, &col[j])
@@ -113,25 +122,25 @@ func (gr *Grid) Iterate(fn GridFunc) {
 	}
 }
 
-func (gr *Grid) At(l Loc) *Cell {
+func (gr *SquareGrid) At(l Loc) *Cell {
 	return &gr.Squares[l.X][l.Y]
 }
 
-func (gr *Grid) IncP(l Loc, n int) {
+func (gr *SquareGrid) IncP(l Loc, n int) {
 	sq := &gr.Squares[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
 }
 
-func (gr *Grid) IncAlpha(l Loc, a float32) {
+func (gr *SquareGrid) IncAlpha(l Loc, a float32) {
 	gr.Squares[l.X][l.Y].IncAlpha(a)
 }
 
-func (gr *Grid) IncTheta(l Loc, t float32) {
+func (gr *SquareGrid) IncTheta(l Loc, t float32) {
 	gr.Squares[l.X][l.Y].IncTheta(t)
 }
 
 // Neighbors runs fn on the nearby cells.
-func (gr *Grid) Neighbors(l Loc, fn GridFunc) {
+func (gr *SquareGrid) Neighbors(l Loc, fn GridFunc) {
 	for _, m := range []Mov{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
 		l := gr.Add(l, m)
 		fn(gr, l, gr.At(l))
@@ -139,14 +148,15 @@ func (gr *Grid) Neighbors(l Loc, fn GridFunc) {
 }
 
 // Draw displays the grid on the target screen.
-func (gr *Grid) Draw(target *ebiten.Image, scale float64) {
+func (gr *SquareGrid) Draw(target *ebiten.Image, scale float64) {
 	w, h := target.Size()
 	// if xscale and yscale aren't identical, how should rotation work? well, at 90 degree rotations,
 	// we want the square to fit cleanly. so. rotate a theoretical unit square, then scale by {x, y}
 	xscale := float32(w) / float32(gr.Width) / 2
 	yscale := float32(h) / float32(gr.Height) / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
-	gr.Iterate(func(gr *Grid, l Loc, c *Cell) {
+	gr.Iterate(func(generic Grid, l Loc, c *Cell) {
+		gr := generic.(*SquareGrid)
 		offset := ((l.Y * gr.Width) + l.X) * 4
 		vs := gr.vertices[offset : offset+4]
 		// xscale and yscale are actually half the size of a default square.

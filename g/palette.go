@@ -29,6 +29,11 @@ var Palettes = map[string]*Palette{
 			{180, 0, 200, 255},
 		},
 	},
+	"grey": {
+		RGBA: []color.RGBA{
+			{220, 220, 220, 255},
+		},
+	},
 }
 
 func init() {
@@ -43,7 +48,7 @@ func (p *Palette) Initialize() {
 	p.ColorMs = make([]ebiten.ColorM, 0, p.Length)
 	p.F32 = make([][3]float32, 0, p.Length)
 	for _, c := range p.RGBA {
-		r, g, b := float64(c.R) / 255, float64(c.G)/255, float64(c.B)/255
+		r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
 		cm := ebiten.ColorM{}
 		cm.Scale(r, g, b, 1.0)
 		p.ColorMs = append(p.ColorMs, cm)
@@ -58,18 +63,18 @@ func interpolate(into []color.RGBA, from, to color.RGBA) {
 
 	for i := 0; i < n; i++ {
 		inv := n - i
-		r := (r0 * inv + r1 * i) / n
-		g := (g0 * inv + g1 * i) / n
-		b := (b0 * inv + b1 * i) / n
-		a := (a0 * inv + a1 * i) / n
-		
+		r := (r0*inv + r1*i) / n
+		g := (g0*inv + g1*i) / n
+		b := (b0*inv + b1*i) / n
+		a := (a0*inv + a1*i) / n
+
 		into[i] = color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)}
 		// fmt.Printf("%d/%d from #%02x%02x%02x to #%02x%02x%02x: #%02x%02x%02x\n", i, n, r0, g0, b0, r1, g1, b1, r, g, b)
 	}
 }
 
-func (p *Palette) Interpolate(n int) (*Palette) {
-	np := &Palette{Length: p.Length * n, RGBA: make([]color.RGBA, p.Length * n)}
+func (p *Palette) Interpolate(n int) *Palette {
+	np := &Palette{Length: p.Length * n, RGBA: make([]color.RGBA, p.Length*n)}
 
 	prev := p.RGBA[0]
 	for idx, next := range p.RGBA[1:] {
@@ -77,7 +82,7 @@ func (p *Palette) Interpolate(n int) (*Palette) {
 		interpolate(np.RGBA[offset:offset+n], prev, next)
 		prev = next
 	}
-	interpolate(np.RGBA[(p.Length - 1) * n:], prev, p.RGBA[0])
+	interpolate(np.RGBA[(p.Length-1)*n:], prev, p.RGBA[0])
 	np.Initialize()
 	return np
 }

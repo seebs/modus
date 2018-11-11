@@ -25,7 +25,7 @@ const (
 
 var (
 	gctx     *g.Context
-	grid     *g.Grid
+	grid     *g.SquareGrid
 	hg       *g.HexGrid
 	line     *g.PolyLine
 	spirals  []*g.Spiral
@@ -38,6 +38,7 @@ var (
 	dty      = 1
 	num      = 20
 	voice    *Voice
+	splat    *ebiten.Image
 )
 
 var knightMoves = []g.Mov{
@@ -107,6 +108,8 @@ var frames = 0
 var tps float64
 var tpsStarted bool
 var sound = true
+var px, py int
+var prevLocs []g.Loc
 
 func update(screen *ebiten.Image) error {
 	cTPS := ebiten.CurrentTPS()
@@ -127,22 +130,34 @@ func update(screen *ebiten.Image) error {
 	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
-		grid.Iterate(func(gr *g.Grid, l g.Loc, c *g.Cell) {
+		grid.Iterate(func(gr g.Grid, l g.Loc, c *g.Cell) {
 			c.IncAlpha(-0.001)
 		})
 		k := &knights[knight]
 		*k = grid.Add(*k, knightMove())
 		grid.IncP(*k, 2)
 		grid.IncAlpha(*k, 0.2)
-		grid.Neighbors(*k, func(gr *g.Grid, l g.Loc, c *g.Cell) {
+		grid.Neighbors(*k, func(gr g.Grid, l g.Loc, c *g.Cell) {
 			gr.IncP(l, 1)
 			c.IncAlpha(0.1)
+		})
+		hg.Iterate(func(gr g.Grid, l g.Loc, c *g.Cell) {
+			c.IncAlpha(-0.001)
 		})
 
 		knight = (knight + 1) % len(knights)
 		for idx, s := range spirals {
-			if bounced, note := s.Update(); bounced && sound {
+			bounced, note, loc := s.Update()
+			if bounced && sound {
 				voice.Play(note+5*idx, 90)
+			}
+			hl, hcell := hg.CellAt(int(loc.X), int(loc.Y))
+			if hcell != nil {
+				if hl != prevLocs[idx] {
+					prevLocs[idx] = hl
+					hcell.P = g.Paint(note)
+					hcell.Alpha = 1
+				}
 			}
 		}
 	}
@@ -202,12 +217,13 @@ func main() {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
-	grid = gctx.NewGrid(40, 1)
+	grid = gctx.NewSquareGrid(40, 1)
 	grid.Palette = g.Palettes["rainbow"]
 	hg = gctx.NewHexGrid(num, 1)
 	hg.Palette = g.Palettes["rainbow"]
 
-	grid.Iterate(func(gr *g.Grid, l g.Loc, c *g.Cell) {
+	grid.Iterate(func(generic g.Grid, l g.Loc, c *g.Cell) {
+		gr := generic.(*g.SquareGrid)
 		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
 	})
 	for i := 0; i < 6; i++ {
@@ -221,6 +237,7 @@ func main() {
 		spiral.Theta = 8 * math.Pi
 		spiral.Step = 2
 		spirals = append(spirals, spiral)
+		prevLocs = append(prevLocs, g.Loc{})
 	}
 	voice, err = NewVoice("breath", 8)
 	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {

@@ -116,18 +116,19 @@ func (s *Spiral) Compute(pl *PolyLine) {
 }
 
 // Update moves the target according to its velocity, possibly adding a ripple.
-func (s *Spiral) Update() (bounced bool, note int) {
+func (s *Spiral) Update() (bounced bool, note int, l Point) {
 	if s.Target.Update() {
 		s.Ripples = append(s.Ripples, s.Length)
 		s.Target.PerturbVelocity()
 		bounced = true
-		note = (int(s.pl[0].Point(0).P) * 6) / (s.Palette.Length)
 	}
+	// emit note/color even if we won't play it
+	note = (int(s.pl[0].Point(0).P) * 6) / (s.Palette.Length)
 	line := s.pl[0]
 	for i := 0; i < s.Depth-1; i++ {
 		s.pl[i] = s.pl[i+1]
 	}
 	s.pl[s.Depth-1] = line
 	s.Compute(line)
-	return bounced, note
+	return bounced, note, s.Target.Loc
 }

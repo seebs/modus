@@ -7,14 +7,15 @@ import (
 )
 
 type HexGrid struct {
-	Width, Height   int
-	hWidth, hHeight float32 // scaling size of
-	Palette         *Palette
-	Cells           [][]Cell
-	render          RenderType
-	vertices        []ebiten.Vertex
-	indices         []uint16
-	ox, oy          float32 // offset to draw grid at for centering
+	Width, Height       int
+	hexWidth, hexHeight float32
+	perHexHeight        float64
+	Palette             *Palette
+	Cells               [][]Cell
+	render              RenderType
+	vertices            []ebiten.Vertex
+	indices             []uint16
+	ox, oy              float32 // offset to draw grid at for centering
 }
 
 // make a new hex grid. since hexes aren't interchangeable, we can't
@@ -42,8 +43,9 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 	// (4h/x - 1)/3 = n
 	vHexes := math.Floor((float64(sy)*4/hexHeight - 1) / 3)
 
-	gr.hWidth = float32(hexWidth)
-	gr.hHeight = float32(hexHeight)
+	gr.hexWidth = float32(hexWidth)
+	gr.hexHeight = float32(hexHeight)
+	gr.perHexHeight = 3 * hexHeight / 4
 	totalHeight := float32((3*vHexes + 1) * hexHeight / 4)
 	totalWidth := float32(hexWidth * (float64(w) + 0.5))
 	gr.ox, gr.oy = (float32(sx)-totalWidth)/2, (float32(sy)-totalHeight)/2
@@ -53,30 +55,75 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 	// fmt.Printf("hexHeight %.1f, sy %d, vHexes %f, total %f\n", hexHeight, sy, vHexes, totalHeight)
 	// fmt.Printf("ox %.1f, oy %.1f\n", gr.ox, gr.oy)
 
-	gr.Cells = make([][]Cell, gr.Height)
+	gr.Cells = make([][]Cell, gr.Width)
 	gr.vertices = make([]ebiten.Vertex, 0, 3*gr.Width*gr.Height)
-	gr.indices = make([]uint16, 3*gr.Width*gr.Height)
-	for row := range gr.Cells {
-		r := make([]Cell, gr.Width)
-		for col := range r {
-			r[col] = Cell{Alpha: 1, Scale: .95}
+	gr.indices = make([]uint16, 3*gr.Width*gr.Width)
+	for col := range gr.Cells {
+		r := make([]Cell, gr.Height)
+		for row := range r {
+			r[row] = Cell{Alpha: 1, Scale: .95}
 			offset := uint16(len(gr.vertices))
 			gr.vertices = append(gr.vertices, hexVerticesByDepth[gr.render]...)
 			gr.indices = append(gr.indices, offset+0, offset+1, offset+2)
 		}
-		gr.Cells[row] = r
+		gr.Cells[col] = r
 	}
 	return gr
 }
 
 //
 func (gr *HexGrid) center(row, col int) (x, y float32) {
-	x = float32(col+1) * gr.hWidth
-	if row&1 != 0 {
-		x -= gr.hWidth / 2
+	x = float32(col+1) * gr.hexWidth
+	if row&1 == 0 {
+		x -= gr.hexWidth / 2
 	}
-	y = gr.hHeight * ((3 * float32(row)) + 2) / 4
+	y = gr.hexHeight * ((3 * float32(row)) + 2) / 4
 	return x + gr.ox, y + gr.oy
+}
+
+func (gr *HexGrid) CellAt(x, y int) (l Loc, c *Cell) {
+	x, y = x-int(gr.ox), y-int(gr.oy)
+	xInt, xOffset := math.Modf(float64(x) / float64(gr.hexWidth))
+	yInt, yOffset := math.Modf(float64(y) / float64(gr.perHexHeight))
+	xOffset -= 0.5
+	xAway := math.Abs(xOffset) / 0.5
+	//	fmt.Printf("%d, %d => %.0f [%.3f] [+%.3f], %.0f [%.3f]", x, y, xInt, xOffset, xAway, yInt, yOffset)
+	x, y = int(xInt), int(yInt)
+	if y%2 == 1 {
+		if yOffset < 0.33 && (1-xAway) > yOffset*3 {
+			y--
+		} else {
+			if xOffset < 0 {
+				x--
+			}
+		}
+	} else {
+		if xAway > yOffset*3 {
+			y--
+			if xOffset < 0 {
+				x--
+			}
+		}
+	}
+	//	fmt.Printf("=> %d, %d\n", x, y)
+	if x >= 0 && x <= gr.Width && y >= 0 && y <= gr.Height {
+		return gr.Cell(x, y)
+	} else {
+		return Loc{X: x, Y: y}, nil
+	}
+}
+
+func (gr *HexGrid) Cell(x, y int) (Loc, *Cell) {
+	if x < 0 {
+		ax := -x
+		x += gr.Width * (1 + (ax / gr.Width))
+	}
+	if y < 0 {
+		ay := -y
+		y += gr.Height * (1 + (ay / gr.Height))
+	}
+	l := Loc{X: x % gr.Width, Y: y % gr.Height}
+	return l, &gr.Cells[l.X][l.Y]
 }
 
 func (gr *HexGrid) Draw(target *ebiten.Image, scale float64) {
@@ -85,14 +132,14 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float64) {
 
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear}
 
-	radius := gr.hHeight
+	radius := gr.hexHeight
 	baseMatrix := IdentityAffine()
 	baseMatrix.Rotate(math.Pi / 2)
 	baseMatrix.Scale(radius, radius)
 	offset := 0
 	hd := hexDests[gr.render]
-	for row, rowCells := range gr.Cells {
-		for col, cell := range rowCells {
+	for col, colCells := range gr.Cells {
+		for row, cell := range colCells {
 			tri := gr.vertices[offset : offset+3]
 			r, g, b, _ := gr.Palette.Float32(cell.P)
 			a := cell.Alpha
@@ -113,4 +160,35 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float64) {
 		}
 	}
 	target.DrawTriangles(gr.vertices, gr.indices, hexTexture, op)
+}
+
+// Iterate runs fn on the entire grid.
+func (gr *HexGrid) Iterate(fn GridFunc) {
+	for i, col := range gr.Cells {
+		for j := range col {
+			fn(gr, Loc{X: i, Y: j}, &col[j])
+		}
+	}
+}
+
+func (gr *HexGrid) At(l Loc) *Cell {
+	return &gr.Cells[l.X][l.Y]
+}
+
+func (gr *HexGrid) IncP(l Loc, n int) {
+	sq := &gr.Cells[l.X][l.Y]
+	sq.P = gr.Palette.Inc(sq.P, n)
+}
+
+func (gr *HexGrid) IncAlpha(l Loc, a float32) {
+	gr.Cells[l.X][l.Y].IncAlpha(a)
+}
+
+func (gr *HexGrid) IncTheta(l Loc, t float32) {
+	gr.Cells[l.X][l.Y].IncTheta(t)
+}
+
+// unimplemented
+func (gr *HexGrid) Neighbors(l Loc, fn GridFunc) {
+	return
 }

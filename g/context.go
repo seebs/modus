@@ -33,10 +33,10 @@ func NewContext(w, h int, multisample bool) *Context {
 	return ctx
 }
 
-// NewGrid returns a grid of squares with width "w"
+// NewSquareGrid returns a grid of squares with width "w"
 // across its wider dimension.
-func (c *Context) NewGrid(w int, r RenderType) *Grid {
-	return newGrid(w, r, c.w, c.h)
+func (c *Context) NewSquareGrid(w int, r RenderType) *SquareGrid {
+	return newSquareGrid(w, r, c.w, c.h)
 }
 
 // NewHexGrid returns a grid of hexes with width "w"
