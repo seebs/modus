@@ -75,13 +75,20 @@ var (
 			{radius: 0.875, value: 220},
 		},
 		[]hexDepth{
-			{radius: 1, value: 220},
-			{radius: 0.875, value: 0},
-			{radius: 0.75, value: 128},
-			{radius: 0.625, value: 96},
+			{radius: 1, value: 192},
+			{radius: 0.875, value: 220},
+			{radius: 0.75, value: 192},
+			{radius: 0.625, value: 128},
+			{radius: 0.5, value: 64},
 		},
 		[]hexDepth{
-			{radius: 1, value: 128},
+			{radius: 1, value: 64},
+			{radius: 0.875, value: 96},
+			{radius: 0.75, value: 128},
+			{radius: 0.625, value: 160},
+			{radius: 0.5, value: 192},
+			{radius: 0.375, value: 224},
+			{radius: 0.25, value: 225},
 		},
 		[]hexDepth{
 			{radius: 1, value: 192},
@@ -97,7 +104,7 @@ var (
 	baseHexDests = [2][][2]float32{
 		{
 			{1.5, -hexHeightScale},
-			{0, -2 * hexHeightScale},
+			{0, 2 * hexHeightScale},
 			{-1.5, -hexHeightScale},
 		},
 		{
