@@ -25,7 +25,6 @@ type RenderType int
 func NewContext(w, h int, multisample bool) *Context {
 	ctx := &Context{w: w, h: h, multisample: multisample}
 	if multisample {
-		ctx.w, ctx.h = ctx.w*2, ctx.h*2
 		ctx.fsaa, _ = ebiten.NewImage(w*2, h*2, ebiten.FilterLinear)
 		ctx.fsaaOp = &ebiten.DrawImageOptions{}
 		ctx.fsaaOp.GeoM.Scale(0.5, 0.5)

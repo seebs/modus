@@ -163,8 +163,8 @@ func update(screen *ebiten.Image) error {
 	}
 
 	gctx.Render(screen, func(t *ebiten.Image, scale float64) {
-		//grid.Draw(t, scale)
-		hg.Draw(t, scale)
+		grid.Draw(t, scale)
+		// hg.Draw(t, scale)
 		for _, s := range spirals {
 			s.Draw(t, scale)
 		}

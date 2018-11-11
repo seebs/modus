@@ -72,13 +72,13 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 }
 
 //
-func (gr *HexGrid) center(row, col int) (x, y float32) {
+func (gr *HexGrid) center(row, col int, scale float32) (x, y float32) {
 	x = float32(col+1) * gr.hexWidth
 	if row&1 == 0 {
 		x -= gr.hexWidth / 2
 	}
 	y = gr.hexHeight * ((3 * float32(row)) + 2) / 4
-	return x + gr.ox, y + gr.oy
+	return (x + gr.ox) * scale, (y + gr.oy) * scale
 }
 
 func (gr *HexGrid) CellAt(x, y int) (l Loc, c *Cell) {
@@ -126,13 +126,14 @@ func (gr *HexGrid) Cell(x, y int) (Loc, *Cell) {
 	return l, &gr.Cells[l.X][l.Y]
 }
 
-func (gr *HexGrid) Draw(target *ebiten.Image, scale float64) {
+func (gr *HexGrid) Draw(target *ebiten.Image, scale64 float64) {
+	scale := float32(scale64)
 	textureSetup()
 	CreateHexTextures()
 
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear}
 
-	radius := gr.hexHeight
+	radius := gr.hexHeight * scale
 	baseMatrix := IdentityAffine()
 	baseMatrix.Rotate(math.Pi / 2)
 	baseMatrix.Scale(radius, radius)
@@ -151,7 +152,7 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float64) {
 			} else {
 				aff = baseMatrix
 			}
-			aff.E, aff.F = gr.center(row, col)
+			aff.E, aff.F = gr.center(row, col, scale)
 			for j := 0; j < 3; j++ {
 				tri[j].ColorR, tri[j].ColorG, tri[j].ColorB, tri[j].ColorA = r, g, b, a
 				tri[j].DstX, tri[j].DstY = aff.Project(hd[j][0], hd[j][1])
