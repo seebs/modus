@@ -7,14 +7,38 @@ import (
 )
 
 // HexLoc is a mapping from ILoc to cubic coordinates
+type HexVec struct {
+	X, Y, Z int
+}
+
 type HexLoc struct {
 	X, Y, Z int
 }
 
-func (h HexLoc) ILoc() ILoc {
-	return ILoc{X: h.X, Y: h.Y}
+func (l HexLoc) ILoc() ILoc {
+	return ILoc{X: l.X, Y: l.Y}
 }
 
+func (v HexVec) IVec() IVec {
+	return IVec{X: v.X, Y: v.Y}
+}
+
+func (l ILoc) HexLoc() HexLoc {
+	return HexLoc{X: l.X, Y: l.Y, Z: -l.X - l.Y}
+}
+
+func (v IVec) HexVec() HexVec {
+	return HexVec{X: v.X, Y: v.Y, Z: -v.X - v.Y}
+}
+
+// We use offsets, so each direction has the same impact on coordinates
+// regardless of row. Coordinates wrap; on a 5x4 grid, for instance,
+// the coordinates {-1,2} and {4,2} denote the same location.
+//
+//   0,0     1,0     2,0     3,0     4,0
+//       0,1     1,1     2,1     3,1     4,1
+//  -1,2     0,2     1,2     2,2     3,2
+//      -1,3     0,3     1,3     2,3     3,3
 type HexGrid struct {
 	Width, Height       int
 	hexWidth, hexHeight float32
@@ -80,8 +104,11 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 	return gr
 }
 
-//
+// yields the center of the hex at [row][col].
 func (gr *HexGrid) center(row, col int, scale float32) (x, y float32) {
+	// move columns over every two rows so 0,N+1 is always southeast from
+	// 0,N.
+	col = (col + (row / 2)) % gr.Width
 	x = float32(col+1) * gr.hexWidth
 	if row&1 == 0 {
 		x -= gr.hexWidth / 2
@@ -115,7 +142,12 @@ func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
 		}
 	}
 	//	fmt.Printf("=> %d, %d\n", x, y)
-	if x >= 0 && x <= gr.Width && y >= 0 && y <= gr.Height {
+	if x >= 0 && x < gr.Width && y >= 0 && y < gr.Height {
+		// handle the column offsets, coerce back into range
+		x -= y / 2
+		if x < 0 {
+			x = (x % gr.Width) + gr.Width
+		}
 		return gr.Cell(x, y)
 	} else {
 		return ILoc{X: x, Y: y}, nil
@@ -123,15 +155,14 @@ func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
 }
 
 func (gr *HexGrid) Cell(x, y int) (ILoc, *Cell) {
+	x, y = x%gr.Width, y%gr.Height
 	if x < 0 {
-		ax := -x
-		x += gr.Width * (1 + (ax / gr.Width))
+		x += gr.Width
 	}
 	if y < 0 {
-		ay := -y
-		y += gr.Height * (1 + (ay / gr.Height))
+		y += gr.Height
 	}
-	l := ILoc{X: x % gr.Width, Y: y % gr.Height}
+	l := ILoc{X: x, Y: y}
 	return l, &gr.Cells[l.X][l.Y]
 }
 
