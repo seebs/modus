@@ -163,8 +163,8 @@ func update(screen *ebiten.Image) error {
 	}
 
 	gctx.Render(screen, func(t *ebiten.Image, scale float32) {
-		grid.Draw(t, scale)
-		// hg.Draw(t, scale)
+		// grid.Draw(t, scale)
+		hg.Draw(t, scale)
 		for _, s := range spirals {
 			s.Draw(t, scale)
 		}
@@ -220,7 +220,7 @@ func main() {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
-	grid = gctx.NewSquareGrid(40, 1)
+	grid = gctx.NewSquareGrid(num, 1)
 	grid.Palette = g.Palettes["rainbow"]
 	hg = gctx.NewHexGrid(num, 0)
 	hg.Palette = g.Palettes["rainbow"]
