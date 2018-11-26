@@ -87,7 +87,7 @@ func update(screen *ebiten.Image) error {
 	pt3 := line.Point(3)
 	pt3.Y = pt2.Y
 	line.Dirty()
-	line.Draw(screen, 1.0)
+	line.Draw(screen, 1.0, 1.0)
 	select {
 	case <-timedOut:
 		return errors.New("regular termination")
@@ -112,7 +112,8 @@ func main() {
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
-	line = g.NewPolyLine(g.Palettes["rainbow"], 3)
+	gctx := g.NewContext(screenWidth, screenHeight, false)
+	line = gctx.NewPolyline(g.Palettes["rainbow"], 1, 1)
 	line.Blend = true
 	// line.DebugColor = true
 	line.Add(50, 50, 0)

@@ -2,10 +2,10 @@ package g
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"sync"
 
+	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
 )
 
@@ -20,7 +20,7 @@ import (
 // convenient.
 type PolyLine struct {
 	Points     []LinePoint
-	Thickness  float64
+	Thickness  float32
 	render     RenderType
 	Palette    *Palette
 	Blend      bool
@@ -35,7 +35,7 @@ type PolyLine struct {
 // A LinePoint is one point in a PolyLine, containing both
 // a location and a Paint corresponding to the PolyLine's Palette.
 type LinePoint struct {
-	X, Y float64
+	X, Y float32
 	P    Paint
 }
 
@@ -60,7 +60,7 @@ func newPolyLine(p *Palette, r RenderType, thickness int) *PolyLine {
 	if r > 3 {
 		r = 3
 	}
-	pl := &PolyLine{Palette: p, render: r, Blend: true, Thickness: float64(thickness)}
+	pl := &PolyLine{Palette: p, render: r, Blend: true, Thickness: float32(thickness)}
 	return pl
 }
 
@@ -74,14 +74,14 @@ func (pl *PolyLine) Debug(enable bool) {
 }
 
 type LineBits struct {
-	dx, dy float64 // delta x, delta y
-	ux, uy float64 // unit x/y: x/y adjusted to a length of 1
-	l      float64 // length
-	nx, ny float64 // normal vector, normalized to unit length
-	theta  float64 // angle, if applicable
+	dx, dy float32 // delta x, delta y
+	ux, uy float32 // unit x/y: x/y adjusted to a length of 1
+	l      float32 // length
+	nx, ny float32 // normal vector, normalized to unit length
+	theta  float32 // angle, if applicable
 }
 
-func linebits(x0, y0, x1, y1 float64) (lb LineBits) {
+func linebits(x0, y0, x1, y1 float32) (lb LineBits) {
 	lb.dx, lb.dy = x1-x0, y1-y0
 	lb.l = math.Sqrt(lb.dx*lb.dx + lb.dy*lb.dy)
 	if lb.l == 0 {
@@ -127,12 +127,12 @@ func linebits(x0, y0, x1, y1 float64) (lb LineBits) {
 // had, plus halfthick * the direction of the line segment.
 //
 //
-var prevTheta float64
+var prevTheta float32
 
 // please inline me
-func adjust(v *ebiten.Vertex, ux, uy, scale float64) {
-	v.DstX += float32(ux * scale)
-	v.DstY += float32(uy * scale)
+func adjust(v *ebiten.Vertex, ux, uy, scale float32) {
+	v.DstX += ux * scale
+	v.DstY += uy * scale
 }
 
 // Dirty marks that a line's been changed in a way it may not easily
@@ -142,9 +142,7 @@ func (pl *PolyLine) Dirty() {
 	pl.dirty = true
 }
 
-func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64, scale64 float64) (vertices, indices int) {
-	alpha := float32(alpha64)
-	scale := float32(scale64)
+func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vertices, indices int) {
 	segments := len(pl.Points) - 1
 	if segments < 1 {
 		// fail
@@ -294,9 +292,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha64 float64, scale64 fl
 
 // The easy case: We compute four vertices per segment,
 // and draw two triangles using them, giving us an easy quad.
-func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64, scale64 float64) (vertices, indices int) {
-	alpha := float32(alpha64)
-	scale := float32(scale64)
+func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (vertices, indices int) {
 	segments := len(pl.Points) / 2
 	if segments < 1 {
 		// fail
@@ -386,7 +382,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha64 float64, scale64 
 
 // Draw renders the line on the target, using the sprite's drawimage
 // options modified by color and location of line segments.
-func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64, scale float64) {
+func (pl *PolyLine) Draw(target *ebiten.Image, alpha float32, scale float32) {
 	thickness := pl.Thickness
 	// no invisible lines plz
 	if thickness == 0 {
@@ -396,9 +392,9 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64, scale float64) {
 	var vCount, iCount int
 	if pl.dirty {
 		if pl.Joined {
-			vCount, iCount = pl.computeJoinedVertices(halfthick, alpha64, scale)
+			vCount, iCount = pl.computeJoinedVertices(halfthick, alpha, scale)
 		} else {
-			vCount, iCount = pl.computeUnjoinedVertices(halfthick, alpha64, scale)
+			vCount, iCount = pl.computeUnjoinedVertices(halfthick, alpha, scale)
 		}
 		// trim to actually returned length
 		pl.vertices = pl.vertices[:vCount]
@@ -409,7 +405,7 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha64 float64, scale float64) {
 	// draw the triangles
 	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 	if pl.debug != nil {
-		pl.debug.Draw(target, alpha64, scale)
+		pl.debug.Draw(target, alpha, scale)
 	}
 }
 
@@ -436,7 +432,7 @@ func (pl *PolyLine) Point(i int) *LinePoint {
 }
 
 // Add adds a new point to the line.
-func (pl *PolyLine) Add(x, y float64, p Paint) {
+func (pl *PolyLine) Add(x, y float32, p Paint) {
 	pt := LinePoint{X: x, Y: y, P: p}
 	pl.Points = append(pl.Points, pt)
 	pl.Dirty()

@@ -6,6 +6,15 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
+// HexLoc is a mapping from ILoc to cubic coordinates
+type HexLoc struct {
+	X, Y, Z int
+}
+
+func (h HexLoc) ILoc() ILoc {
+	return ILoc{X: h.X, Y: h.Y}
+}
+
 type HexGrid struct {
 	Width, Height       int
 	hexWidth, hexHeight float32
@@ -81,7 +90,7 @@ func (gr *HexGrid) center(row, col int, scale float32) (x, y float32) {
 	return (x + gr.ox) * scale, (y + gr.oy) * scale
 }
 
-func (gr *HexGrid) CellAt(x, y int) (l Loc, c *Cell) {
+func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
 	x, y = x-int(gr.ox), y-int(gr.oy)
 	xInt, xOffset := math.Modf(float64(x) / float64(gr.hexWidth))
 	yInt, yOffset := math.Modf(float64(y) / float64(gr.perHexHeight))
@@ -109,11 +118,11 @@ func (gr *HexGrid) CellAt(x, y int) (l Loc, c *Cell) {
 	if x >= 0 && x <= gr.Width && y >= 0 && y <= gr.Height {
 		return gr.Cell(x, y)
 	} else {
-		return Loc{X: x, Y: y}, nil
+		return ILoc{X: x, Y: y}, nil
 	}
 }
 
-func (gr *HexGrid) Cell(x, y int) (Loc, *Cell) {
+func (gr *HexGrid) Cell(x, y int) (ILoc, *Cell) {
 	if x < 0 {
 		ax := -x
 		x += gr.Width * (1 + (ax / gr.Width))
@@ -122,12 +131,11 @@ func (gr *HexGrid) Cell(x, y int) (Loc, *Cell) {
 		ay := -y
 		y += gr.Height * (1 + (ay / gr.Height))
 	}
-	l := Loc{X: x % gr.Width, Y: y % gr.Height}
+	l := ILoc{X: x % gr.Width, Y: y % gr.Height}
 	return l, &gr.Cells[l.X][l.Y]
 }
 
-func (gr *HexGrid) Draw(target *ebiten.Image, scale64 float64) {
-	scale := float32(scale64)
+func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 	textureSetup()
 	CreateHexTextures()
 
@@ -167,29 +175,29 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale64 float64) {
 func (gr *HexGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Cells {
 		for j := range col {
-			fn(gr, Loc{X: i, Y: j}, &col[j])
+			fn(gr, ILoc{X: i, Y: j}, &col[j])
 		}
 	}
 }
 
-func (gr *HexGrid) At(l Loc) *Cell {
+func (gr *HexGrid) At(l ILoc) *Cell {
 	return &gr.Cells[l.X][l.Y]
 }
 
-func (gr *HexGrid) IncP(l Loc, n int) {
+func (gr *HexGrid) IncP(l ILoc, n int) {
 	sq := &gr.Cells[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
 }
 
-func (gr *HexGrid) IncAlpha(l Loc, a float32) {
+func (gr *HexGrid) IncAlpha(l ILoc, a float32) {
 	gr.Cells[l.X][l.Y].IncAlpha(a)
 }
 
-func (gr *HexGrid) IncTheta(l Loc, t float32) {
+func (gr *HexGrid) IncTheta(l ILoc, t float32) {
 	gr.Cells[l.X][l.Y].IncTheta(t)
 }
 
 // unimplemented
-func (gr *HexGrid) Neighbors(l Loc, fn GridFunc) {
+func (gr *HexGrid) Neighbors(l ILoc, fn GridFunc) {
 	return
 }

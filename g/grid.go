@@ -29,22 +29,12 @@ func (g *SquareGrid) RandCol() int {
 	return int(rand.Int31n(int32(g.Width)))
 }
 
-func (g *SquareGrid) NewLoc() Loc {
-	return Loc{X: g.RandCol(), Y: g.RandRow()}
+func (g *SquareGrid) NewLoc() ILoc {
+	return ILoc{X: g.RandCol(), Y: g.RandRow()}
 }
 
-func (g *SquareGrid) Add(l Loc, m Mov) Loc {
-	return Loc{X: (l.X + m.X + g.Width) % g.Width, Y: (l.Y + m.Y + g.Height) % g.Height}
-}
-
-// A Loc represents a location within a grid. (Contrast time.Time.)
-type Loc struct {
-	X, Y int
-}
-
-// A Mov represents movement within a grid. (Contrast time.Duration.)
-type Mov struct {
-	X, Y int
+func (g *SquareGrid) Add(l ILoc, v IVec) ILoc {
+	return ILoc{X: (l.X + v.X + g.Width) % g.Width, Y: (l.Y + v.Y + g.Height) % g.Height}
 }
 
 func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
@@ -102,60 +92,75 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 }
 
 type Grid interface {
-	At(Loc) *Cell
-	IncP(Loc, int)
-	IncAlpha(Loc, float32)
-	IncTheta(Loc, float32)
-	Neighbors(Loc, GridFunc)
+	At(ILoc) *Cell
+	IncP(ILoc, int)
+	IncAlpha(ILoc, float32)
+	IncTheta(ILoc, float32)
+	Neighbors(ILoc, GridFunc)
 	Iterate(GridFunc)
 }
 
 // A SquareGridFunc is a general callback for operations on the grid.
-type GridFunc func(gr Grid, l Loc, c *Cell)
+type GridFunc func(gr Grid, l ILoc, c *Cell)
 
 // Iterate runs fn on the entire grid.
 func (gr *SquareGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Squares {
 		for j := range col {
-			fn(gr, Loc{X: i, Y: j}, &col[j])
+			fn(gr, ILoc{X: i, Y: j}, &col[j])
 		}
 	}
 }
 
-func (gr *SquareGrid) At(l Loc) *Cell {
+func (gr *SquareGrid) At(l ILoc) *Cell {
 	return &gr.Squares[l.X][l.Y]
 }
 
-func (gr *SquareGrid) IncP(l Loc, n int) {
+func (gr *SquareGrid) IncP(l ILoc, n int) {
 	sq := &gr.Squares[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
 }
 
-func (gr *SquareGrid) IncAlpha(l Loc, a float32) {
+func (gr *SquareGrid) IncAlpha(l ILoc, a float32) {
 	gr.Squares[l.X][l.Y].IncAlpha(a)
 }
 
-func (gr *SquareGrid) IncTheta(l Loc, t float32) {
+func (gr *SquareGrid) IncTheta(l ILoc, t float32) {
 	gr.Squares[l.X][l.Y].IncTheta(t)
 }
 
-// Neighbors runs fn on the nearby cells.
-func (gr *SquareGrid) Neighbors(l Loc, fn GridFunc) {
-	for _, m := range []Mov{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
-		l := gr.Add(l, m)
-		fn(gr, l, gr.At(l))
+// Splash splashes out from the given square, hitting squares
+// between min and max out. A distance of 1 means the 4 adjacent
+// squares, distance 2 means the 8 squares next out from those.
+func (gr *SquareGrid) Splash(l ILoc, min, max int, fn GridFunc) {
+	for depth := min; depth <= max; depth++ {
+		for i, j := 0, depth; i < depth; i, j = i+1, j-1 {
+			there := gr.Add(l, IVec{i, j})
+			fn(gr, there, &gr.Squares[there.X][there.Y])
+			there = gr.Add(l, IVec{j, -i})
+			fn(gr, there, &gr.Squares[there.X][there.Y])
+			there = gr.Add(l, IVec{-i, -j})
+			fn(gr, there, &gr.Squares[there.X][there.Y])
+			there = gr.Add(l, IVec{-j, i})
+			fn(gr, there, &gr.Squares[there.X][there.Y])
+		}
 	}
 }
 
+// Neighbors runs fn on the nearby cells.
+func (gr *SquareGrid) Neighbors(l ILoc, fn GridFunc) {
+	gr.Splash(l, 1, 1, fn)
+}
+
 // Draw displays the grid on the target screen.
-func (gr *SquareGrid) Draw(target *ebiten.Image, scale float64) {
+func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	w, h := target.Size()
 	// if xscale and yscale aren't identical, how should rotation work? well, at 90 degree rotations,
 	// we want the square to fit cleanly. so. rotate a theoretical unit square, then scale by {x, y}
 	xscale := float32(w) / float32(gr.Width) / 2
 	yscale := float32(h) / float32(gr.Height) / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
-	gr.Iterate(func(generic Grid, l Loc, c *Cell) {
+	gr.Iterate(func(generic Grid, l ILoc, c *Cell) {
 		gr := generic.(*SquareGrid)
 		offset := ((l.Y * gr.Width) + l.X) * 4
 		vs := gr.vertices[offset : offset+4]

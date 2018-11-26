@@ -1,3 +1,7 @@
+// Package g provides either Graphics or Geometry depending on my mood.
+// It's intended to provide the infrastructure necessary for the
+// Miracle Modus, using ebiten for the rendering backend, but also
+// providing useful data structures and an API for working with them.
 package g
 
 import (
@@ -6,39 +10,46 @@ import (
 	"math/rand"
 )
 
-// A Point represents a location on-screen.
-type Point struct {
-	X, Y float64
-}
+// General geometry functions.
 
 // A MovingPoint is a point which has a velocity, and can bounce off the
 // edges of a screen or something.
 type MovingPoint struct {
 	Loc      Point
-	Velocity Point
+	Velocity Vec
 	Bounds   image.Rectangle
+}
+
+// IVec represents a vector of motion within a grid. (Contrast time.Duration.)
+type IVec struct {
+	X, Y int
+}
+
+// ILoc represents a location within a grid. (Contrast time.Time.)
+type ILoc struct {
+	X, Y int
 }
 
 // moveCoordinate moves x by dx, returning new x, new dx, and whether or
 // not a bounce happened.
-func moveCoordinate(x, dx float64, min, max int) (float64, float64, bool) {
+func moveCoordinate(x, dx float32, min, max int) (float32, float32, bool) {
 	bounce := false
 	x += dx
-	var dabs, dsign, base float64
-	if x < float64(min) {
-		dabs = float64(min) - x
+	var dabs, dsign, base float32
+	if x < float32(min) {
+		dabs = float32(min) - x
 		dsign = -1
-		base = float64(min)
+		base = float32(min)
 		bounce = true
 	}
-	if x > float64(max) {
-		dabs = x - float64(max)
+	if x > float32(max) {
+		dabs = x - float32(max)
 		dsign = 1
-		base = float64(max)
+		base = float32(max)
 		bounce = true
 	}
 	if bounce {
-		scale := float64(max - min)
+		scale := float32(max - min)
 		// if moving too fast, slow down
 		if dabs > scale/2 {
 			dabs = scale / 2
@@ -86,6 +97,22 @@ func (m *MovingPoint) Update() bool {
 // { b, d, f }
 type Affine struct {
 	A, B, C, D, E, F float32
+}
+
+type Vec struct {
+	X, Y float32
+}
+
+type Point struct {
+	X, Y float32
+}
+
+func (v Vec) Project(a *Affine) Vec {
+	return Vec{X: a.A*v.X + a.C*v.Y, Y: a.B*v.X + a.D*v.Y}
+}
+
+func (p Point) Project(a *Affine) Point {
+	return Point{X: a.A*p.X + a.C*p.Y + a.E, Y: a.B*p.X + a.D*p.Y + a.F}
 }
 
 // Project applies the affine matrix.

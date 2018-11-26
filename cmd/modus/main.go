@@ -29,7 +29,7 @@ var (
 	hg       *g.HexGrid
 	line     *g.PolyLine
 	spirals  []*g.Spiral
-	knights  []g.Loc
+	knights  []g.ILoc
 	knight   int
 	timedOut <-chan time.Time
 	tx       = 640
@@ -41,7 +41,7 @@ var (
 	splat    *ebiten.Image
 )
 
-var knightMoves = []g.Mov{
+var knightMoves = []g.IVec{
 	{-2, -1},
 	{-1, -2},
 	{1, -2},
@@ -52,7 +52,7 @@ var knightMoves = []g.Mov{
 	{-2, 1},
 }
 
-func knightMove() g.Mov {
+func knightMove() g.IVec {
 	return knightMoves[int(rand.Int31n(int32(len(knightMoves))))]
 }
 
@@ -109,7 +109,7 @@ var tps float64
 var tpsStarted bool
 var sound = true
 var px, py int
-var prevLocs []g.Loc
+var prevLocs []g.ILoc
 
 func update(screen *ebiten.Image) error {
 	cTPS := ebiten.CurrentTPS()
@@ -130,18 +130,18 @@ func update(screen *ebiten.Image) error {
 	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
-		grid.Iterate(func(gr g.Grid, l g.Loc, c *g.Cell) {
+		grid.Iterate(func(gr g.Grid, l g.ILoc, c *g.Cell) {
 			c.IncAlpha(-0.001)
 		})
 		k := &knights[knight]
 		*k = grid.Add(*k, knightMove())
 		grid.IncP(*k, 2)
 		grid.IncAlpha(*k, 0.2)
-		grid.Neighbors(*k, func(gr g.Grid, l g.Loc, c *g.Cell) {
+		grid.Splash(*k, 1, 1, func(gr g.Grid, l g.ILoc, c *g.Cell) {
 			gr.IncP(l, 1)
 			c.IncAlpha(0.1)
 		})
-		hg.Iterate(func(gr g.Grid, l g.Loc, c *g.Cell) {
+		hg.Iterate(func(gr g.Grid, l g.ILoc, c *g.Cell) {
 			c.IncAlpha(-0.001)
 		})
 
@@ -162,7 +162,7 @@ func update(screen *ebiten.Image) error {
 		}
 	}
 
-	gctx.Render(screen, func(t *ebiten.Image, scale float64) {
+	gctx.Render(screen, func(t *ebiten.Image, scale float32) {
 		grid.Draw(t, scale)
 		// hg.Draw(t, scale)
 		for _, s := range spirals {
@@ -179,9 +179,12 @@ func update(screen *ebiten.Image) error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pqs#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pPqs#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
+	}
+	if opts.Seen("P") {
+		pause = true
 	}
 	if opts.Seen("p") {
 		f, err := os.Create("cpu-profile.dat")
@@ -219,25 +222,25 @@ func main() {
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
 	grid = gctx.NewSquareGrid(40, 1)
 	grid.Palette = g.Palettes["rainbow"]
-	hg = gctx.NewHexGrid(num, 1)
+	hg = gctx.NewHexGrid(num, 0)
 	hg.Palette = g.Palettes["rainbow"]
 
-	grid.Iterate(func(generic g.Grid, l g.Loc, c *g.Cell) {
+	grid.Iterate(func(generic g.Grid, l g.ILoc, c *g.Cell) {
 		gr := generic.(*g.SquareGrid)
 		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
 	})
-	for i := 0; i < 6; i++ {
-		knights = append(knights, grid.NewLoc())
+	for i := 0; i < 1; i++ {
+		knights = append(knights, g.ILoc{X: 10, Y: 10})
 	}
 	for i := 0; i < 3; i++ {
 		spiral := gctx.NewSpiral(11, 1, 400, g.Palettes["rainbow"], 3, i*2)
-		spiral.Center = g.MovingPoint{Loc: g.Point{X: float64(screenWidth) / 2, Y: float64(screenHeight) / 2}}
-		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float64() * screenWidth, Y: rand.Float64() * screenHeight}, Velocity: g.Point{X: rand.Float64()*30 - 15, Y: rand.Float64()*30 - 15}}
+		spiral.Center = g.MovingPoint{Loc: g.Point{X: float32(screenWidth) / 2, Y: float32(screenHeight) / 2}}
+		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float32() * screenWidth, Y: rand.Float32() * screenHeight}, Velocity: g.Vec{X: rand.Float32()*30 - 15, Y: rand.Float32()*30 - 15}}
 		spiral.Target.SetBounds(screenWidth, screenHeight)
 		spiral.Theta = 8 * math.Pi
 		spiral.Step = 2
 		spirals = append(spirals, spiral)
-		prevLocs = append(prevLocs, g.Loc{})
+		prevLocs = append(prevLocs, g.ILoc{})
 	}
 	voice, err = NewVoice("breath", 8)
 	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {

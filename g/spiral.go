@@ -1,7 +1,7 @@
 package g
 
 import (
-	"math"
+	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
 )
@@ -10,7 +10,7 @@ import (
 // a target point.
 type Spiral struct {
 	Center, Target MovingPoint
-	Theta          float64
+	Theta          float32
 	Depth          int
 	render         RenderType
 	Length         int
@@ -18,16 +18,16 @@ type Spiral struct {
 	Palette        *Palette
 	Ripples        []int
 	pl             []*PolyLine
-	thetas         []float64
+	thetas         []float32
 	sprite         *Sprite
-	scaleTheta     float64
-	thetaRatio     float64
+	scaleTheta     float32
+	thetaRatio     float32
 }
 
 // the ripple pattern is used to perturb the radius of a spiral to make it look
 // like it's bouncing.
 var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
-var defaultThetaRatio = 4.0
+var defaultThetaRatio = float32(4.0)
 
 // newSpiral creates a new spiral.
 func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int) *Spiral {
@@ -40,7 +40,7 @@ func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offs
 	// an offset of 1 is "one color"
 	offset *= paletteScale
 	// scale theta: inner points get thetaRatio times as much theta as outer points
-	s.thetas = make([]float64, s.Length)
+	s.thetas = make([]float32, s.Length)
 	s.SetThetaRatio(defaultThetaRatio)
 	for i := 0; i < s.Depth; i++ {
 		l := newPolyLine(s.Palette, r, 3)
@@ -58,20 +58,20 @@ func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offs
 // SetThetaRatio recomputes theta values for a 1:N theta ratio,
 // meaning that the innermost segment will be about N times as
 // large an angle as the outermost.
-func (s *Spiral) SetThetaRatio(ratio float64) {
+func (s *Spiral) SetThetaRatio(ratio float32) {
 	s.thetaRatio = ratio
-	subscale := (s.thetaRatio - 1.0) / float64(s.Length)
+	subscale := (s.thetaRatio - 1.0) / float32(s.Length)
 	s.scaleTheta = 0
 	for i := 1; i < s.Length; i++ {
-		s.scaleTheta += (subscale * float64(s.Length-i)) + 1
+		s.scaleTheta += (subscale * float32(s.Length-i)) + 1
 		s.thetas[i] = s.scaleTheta
 	}
 }
 
 // Draw draws the spiral on the specified image.
-func (s *Spiral) Draw(target *ebiten.Image, scale float64) {
+func (s *Spiral) Draw(target *ebiten.Image, scale float32) {
 	for i := 0; i < s.Depth; i += s.Step {
-		s.pl[i].Draw(target, (float64(i)+1)/float64(s.Depth), scale)
+		s.pl[i].Draw(target, (float32(i)+1)/float32(s.Depth), scale)
 	}
 }
 
@@ -104,9 +104,9 @@ func (s *Spiral) Compute(pl *PolyLine) {
 	for i := 1; i < s.Length-1; i++ {
 		pt := pl.Point(i)
 		sin, cos := math.Sincos((s.thetas[i]/s.scaleTheta)*s.Theta + baseTheta)
-		r := float64(i) / float64(s.Length-1) * baseR
+		r := float32(i) / float32(s.Length-1) * baseR
 		if ripples[i] != 0 {
-			r *= 1 + (0.03 * float64(ripples[i]))
+			r *= 1 + (0.03 * float32(ripples[i]))
 		}
 		x, y := (cos*r)+s.Center.Loc.X, (sin*r)+s.Center.Loc.Y
 		pt.X, pt.Y = x, y

@@ -61,7 +61,7 @@ func (c *Context) DrawSize() (int, int) {
 	}
 }
 
-func (c *Context) Render(screen *ebiten.Image, fn func(*ebiten.Image, float64)) {
+func (c *Context) Render(screen *ebiten.Image, fn func(*ebiten.Image, float32)) {
 	if c.multisample {
 		c.fsaa.Fill(color.RGBA{0, 0, 0, 0})
 		fn(c.fsaa, 2)
