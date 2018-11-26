@@ -21,20 +21,20 @@ type SquareGrid struct {
 	scale  float64 // actual size in pixels. integer plz.
 }
 
-func (g *SquareGrid) RandRow() int {
-	return int(rand.Int31n(int32(g.Height)))
+func (gr *SquareGrid) RandRow() int {
+	return int(rand.Int31n(int32(gr.Height)))
 }
 
-func (g *SquareGrid) RandCol() int {
-	return int(rand.Int31n(int32(g.Width)))
+func (gr *SquareGrid) RandCol() int {
+	return int(rand.Int31n(int32(gr.Width)))
 }
 
-func (g *SquareGrid) NewLoc() ILoc {
-	return ILoc{X: g.RandCol(), Y: g.RandRow()}
+func (gr *SquareGrid) NewLoc() ILoc {
+	return ILoc{X: gr.RandCol(), Y: gr.RandRow()}
 }
 
-func (g *SquareGrid) Add(l ILoc, v IVec) ILoc {
-	return ILoc{X: (l.X + v.X + g.Width) % g.Width, Y: (l.Y + v.Y + g.Height) % g.Height}
+func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
+	return ILoc{X: (l.X + v.X + gr.Width) % gr.Width, Y: (l.Y + v.Y + gr.Height) % gr.Height}
 }
 
 func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
