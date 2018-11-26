@@ -34,7 +34,14 @@ func (gr *SquareGrid) NewLoc() ILoc {
 }
 
 func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
-	return ILoc{X: (l.X + v.X + gr.Width) % gr.Width, Y: (l.Y + v.Y + gr.Height) % gr.Height}
+	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
+	if x < 0 {
+		x += gr.Width
+	}
+	if y < 0 {
+		y += gr.Height
+	}
+	return ILoc{X: x, Y: y}
 }
 
 func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
@@ -133,6 +140,14 @@ func (gr *SquareGrid) IncTheta(l ILoc, t float32) {
 // between min and max out. A distance of 1 means the 4 adjacent
 // squares, distance 2 means the 8 squares next out from those.
 func (gr *SquareGrid) Splash(l ILoc, min, max int, fn GridFunc) {
+	if min < 0 {
+		min = 0
+	}
+	// zero radius is the square itself
+	if min == 0 {
+		fn(gr, l, &gr.Squares[l.X][l.Y])
+		min++
+	}
 	for depth := min; depth <= max; depth++ {
 		for i, j := 0, depth; i < depth; i, j = i+1, j-1 {
 			there := gr.Add(l, IVec{i, j})

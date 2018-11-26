@@ -25,6 +25,10 @@ type IVec struct {
 	X, Y int
 }
 
+func (v IVec) Times(n int) IVec {
+	return IVec{X: v.X * n, Y: v.Y * n}
+}
+
 // ILoc represents a location within a grid. (Contrast time.Time.)
 type ILoc struct {
 	X, Y int

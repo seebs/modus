@@ -15,6 +15,15 @@ type HexLoc struct {
 	X, Y, Z int
 }
 
+var hexDirections = []IVec{
+	{X: 1, Y: 0},
+	{X: 1, Y: -1},
+	{X: 0, Y: -1},
+	{X: -1, Y: 0},
+	{X: -1, Y: 1},
+	{X: 0, Y: 1},
+}
+
 func (l HexLoc) ILoc() ILoc {
 	return ILoc{X: l.X, Y: l.Y}
 }
@@ -228,7 +237,39 @@ func (gr *HexGrid) IncTheta(l ILoc, t float32) {
 	gr.Cells[l.X][l.Y].IncTheta(t)
 }
 
-// unimplemented
+// Splash does splashes in rings of radius min..max.
+func (gr *HexGrid) Splash(l ILoc, min, max int, fn GridFunc) {
+	if min < 0 {
+		min = 0
+	}
+	if min == 0 {
+		fn(gr, l, &gr.Cells[l.X][l.Y])
+		min++
+	}
+	for depth := min; depth <= max; depth++ {
+		for idx, vec := range hexDirections {
+			loc := gr.Add(l, vec.Times(depth))
+			right := hexDirections[(idx+2)%len(hexDirections)]
+			fn(gr, loc, &gr.Cells[loc.X][loc.Y])
+			for i := 1; i < depth; i++ {
+				loc = gr.Add(loc, right)
+				fn(gr, loc, &gr.Cells[loc.X][loc.Y])
+			}
+		}
+	}
+}
+
 func (gr *HexGrid) Neighbors(l ILoc, fn GridFunc) {
-	return
+	gr.Splash(l, 1, 1, fn)
+}
+
+func (gr *HexGrid) Add(l ILoc, v IVec) ILoc {
+	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
+	if x < 0 {
+		x += gr.Width
+	}
+	if y < 0 {
+		y += gr.Height
+	}
+	return ILoc{X: x, Y: y}
 }
