@@ -130,18 +130,18 @@ func update(screen *ebiten.Image) error {
 	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
-		grid.Iterate(func(gr g.Grid, l g.ILoc, c *g.Cell) {
+		grid.Iterate(func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
 			c.IncAlpha(-0.001)
 		})
 		k := &knights[knight]
 		*k = grid.Add(*k, knightMove())
 		grid.IncP(*k, 2)
 		grid.IncAlpha(*k, 0.2)
-		grid.Splash(*k, 1, 1, func(gr g.Grid, l g.ILoc, c *g.Cell) {
+		grid.Splash(*k, 1, 1, func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
 			gr.IncP(l, 1)
 			c.IncAlpha(0.1)
 		})
-		hg.Iterate(func(gr g.Grid, l g.ILoc, c *g.Cell) {
+		hg.Iterate(func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
 			c.IncAlpha(-0.001)
 		})
 
@@ -225,7 +225,7 @@ func main() {
 	hg = gctx.NewHexGrid(num, 0)
 	hg.Palette = g.Palettes["rainbow"]
 
-	grid.Iterate(func(generic g.Grid, l g.ILoc, c *g.Cell) {
+	grid.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
 		gr := generic.(*g.SquareGrid)
 		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
 	})
