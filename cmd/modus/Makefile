@@ -13,7 +13,11 @@ full-lint: lint
 	staticcheck
 
 ppdf:
-	-rm cpu-profile.pdf heap-profile.pdf alloc-profile.pdf
-	-[ -f cpu-profile.dat ] && go tool pprof --pdf cpu-profile.dat > cpu-profile.pdf
-	-[ -f heap-profile.dat ] && go tool pprof --pdf heap-profile.dat > heap-profile.pdf
-	-[ -f alloc-profile.dat ] && go tool pprof --pdf alloc-profile.dat > alloc-profile.pdf
+	okay=true ; \
+	for profile in cpu heap alloc; do \
+		path=$${profile}-profile; \
+		if [ -f $$path.dat ] ; then \
+			rm $$path.pdf; \
+			go tool pprof --pdf $$path.dat > $$path.pdf || okay=false ; \
+		fi; \
+	done; $$okay
