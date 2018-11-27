@@ -54,6 +54,7 @@ type HexGrid struct {
 	perHexHeight        float32
 	Palette             *Palette
 	Cells               [][]Cell
+	ExtraCells          []*FloatingCell
 	render              RenderType
 	vertices            []ebiten.Vertex
 	indices             []uint16
@@ -112,6 +113,13 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 		gr.Cells[col] = r
 	}
 	return gr
+}
+
+// NewExtraCell yields a new FloatingCell, in ExtraCells.
+func (gr *HexGrid) NewExtraCell() *FloatingCell {
+	c := &FloatingCell{}
+	gr.ExtraCells = append(gr.ExtraCells, c)
+	return c
 }
 
 // yields the center of the hex at [row][col].

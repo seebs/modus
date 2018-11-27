@@ -8,11 +8,20 @@ import "math"
 // cells which are directly touching.
 type Cell struct {
 	P     Paint
+	R     RenderType
 	Alpha float32
 	Theta float32
 	Scale float32
 }
 
+// FloatingCell represents a single floating cell, which may be rendered
+// in a non-integer location over a grid.
+type FloatingCell struct {
+	Cell
+	X, Y float32
+}
+
+// IncTheta rotates the given cell by t.
 func (c *Cell) IncTheta(t float32) {
 	t += c.Theta
 	if t < 0 {
@@ -26,6 +35,7 @@ func (c *Cell) IncTheta(t float32) {
 	c.Theta = t
 }
 
+// IncAlpha increments the given cell's alpha by a, clamping to 0/1.
 func (c *Cell) IncAlpha(a float32) {
 	a += c.Alpha
 	if a < 0 {

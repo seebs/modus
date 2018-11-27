@@ -11,8 +11,9 @@ import (
 // SquareGrid represents a grid of squares.
 type SquareGrid struct {
 	Width, Height int
-	Squares       [][]Cell
+	Cells         [][]Cell
 	Palette       *Palette
+	ExtraCells    []*FloatingCell
 	vertices      []ebiten.Vertex
 	base          []ebiten.Vertex
 	indices       []uint16
@@ -22,18 +23,23 @@ type SquareGrid struct {
 	scale  float32 // actual size in pixels. integer plz.
 }
 
+// RandRow yields a random valid row.
 func (gr *SquareGrid) RandRow() int {
 	return int(rand.Int31n(int32(gr.Height)))
 }
 
+// RandCol yields a random valid column.
 func (gr *SquareGrid) RandCol() int {
 	return int(rand.Int31n(int32(gr.Width)))
 }
 
+// NewLoc yields a random valid location.
 func (gr *SquareGrid) NewLoc() ILoc {
 	return ILoc{X: gr.RandCol(), Y: gr.RandRow()}
 }
 
+// Add adds the provided vector and location, then wraps to produce a value
+// within the bounds of the grid.
 func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
 	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
 	if x < 0 {
@@ -67,10 +73,10 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 		oy:     (sy - int(scale)*h) / 2,
 		base:   squareVerticesByDepth[r],
 	}
-	gr.Squares = make([][]Cell, gr.Width)
-	for idx := range gr.Squares {
+	gr.Cells = make([][]Cell, gr.Width)
+	for idx := range gr.Cells {
 		col := make([]Cell, gr.Height)
-		gr.Squares[idx] = col
+		gr.Cells[idx] = col
 		for j := range col {
 			// set alpha to opaque by default
 			col[j].Alpha = 1
@@ -100,6 +106,7 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 }
 
 type Grid interface {
+	Add(ILoc, IVec) ILoc
 	At(ILoc) *Cell
 	IncP(ILoc, int)
 	IncAlpha(ILoc, float32)
@@ -107,6 +114,7 @@ type Grid interface {
 	Neighbors(ILoc, GridFunc)
 	Splash(ILoc, int, int, GridFunc)
 	Iterate(GridFunc)
+	NewExtraCell() *FloatingCell
 }
 
 // A SquareGridFunc is a general callback for operations on the grid.
@@ -114,28 +122,35 @@ type GridFunc func(gr Grid, l ILoc, n int, c *Cell)
 
 // Iterate runs fn on the entire grid.
 func (gr *SquareGrid) Iterate(fn GridFunc) {
-	for i, col := range gr.Squares {
+	for i, col := range gr.Cells {
 		for j := range col {
 			fn(gr, ILoc{X: i, Y: j}, 1, &col[j])
 		}
 	}
 }
 
+// NewExtraCell yields a new FloatingCell, in ExtraCells.
+func (gr *SquareGrid) NewExtraCell() *FloatingCell {
+	c := &FloatingCell{}
+	gr.ExtraCells = append(gr.ExtraCells, c)
+	return c
+}
+
 func (gr *SquareGrid) At(l ILoc) *Cell {
-	return &gr.Squares[l.X][l.Y]
+	return &gr.Cells[l.X][l.Y]
 }
 
 func (gr *SquareGrid) IncP(l ILoc, n int) {
-	sq := &gr.Squares[l.X][l.Y]
+	sq := &gr.Cells[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
 }
 
 func (gr *SquareGrid) IncAlpha(l ILoc, a float32) {
-	gr.Squares[l.X][l.Y].IncAlpha(a)
+	gr.Cells[l.X][l.Y].IncAlpha(a)
 }
 
 func (gr *SquareGrid) IncTheta(l ILoc, t float32) {
-	gr.Squares[l.X][l.Y].IncTheta(t)
+	gr.Cells[l.X][l.Y].IncTheta(t)
 }
 
 // Splash splashes out from the given square, hitting squares
@@ -147,19 +162,19 @@ func (gr *SquareGrid) Splash(l ILoc, min, max int, fn GridFunc) {
 	}
 	// zero radius is the square itself
 	if min == 0 {
-		fn(gr, l, 0, &gr.Squares[l.X][l.Y])
+		fn(gr, l, 0, &gr.Cells[l.X][l.Y])
 		min++
 	}
 	for depth := min; depth <= max; depth++ {
 		for i, j := 0, depth; i < depth; i, j = i+1, j-1 {
 			there := gr.Add(l, IVec{i, j})
-			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
 			there = gr.Add(l, IVec{j, -i})
-			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
 			there = gr.Add(l, IVec{-i, -j})
-			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
 			there = gr.Add(l, IVec{-j, i})
-			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
 		}
 	}
 }
