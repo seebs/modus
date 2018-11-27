@@ -104,17 +104,18 @@ type Grid interface {
 	IncAlpha(ILoc, float32)
 	IncTheta(ILoc, float32)
 	Neighbors(ILoc, GridFunc)
+	Splash(ILoc, int, int, GridFunc)
 	Iterate(GridFunc)
 }
 
 // A SquareGridFunc is a general callback for operations on the grid.
-type GridFunc func(gr Grid, l ILoc, c *Cell)
+type GridFunc func(gr Grid, l ILoc, n int, c *Cell)
 
 // Iterate runs fn on the entire grid.
 func (gr *SquareGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Squares {
 		for j := range col {
-			fn(gr, ILoc{X: i, Y: j}, &col[j])
+			fn(gr, ILoc{X: i, Y: j}, 1, &col[j])
 		}
 	}
 }
@@ -145,19 +146,19 @@ func (gr *SquareGrid) Splash(l ILoc, min, max int, fn GridFunc) {
 	}
 	// zero radius is the square itself
 	if min == 0 {
-		fn(gr, l, &gr.Squares[l.X][l.Y])
+		fn(gr, l, 0, &gr.Squares[l.X][l.Y])
 		min++
 	}
 	for depth := min; depth <= max; depth++ {
 		for i, j := 0, depth; i < depth; i, j = i+1, j-1 {
 			there := gr.Add(l, IVec{i, j})
-			fn(gr, there, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
 			there = gr.Add(l, IVec{j, -i})
-			fn(gr, there, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
 			there = gr.Add(l, IVec{-i, -j})
-			fn(gr, there, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
 			there = gr.Add(l, IVec{-j, i})
-			fn(gr, there, &gr.Squares[there.X][there.Y])
+			fn(gr, there, depth, &gr.Squares[there.X][there.Y])
 		}
 	}
 }
@@ -175,7 +176,7 @@ func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	xscale := float32(w) / float32(gr.Width) / 2
 	yscale := float32(h) / float32(gr.Height) / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
-	gr.Iterate(func(generic Grid, l ILoc, c *Cell) {
+	gr.Iterate(func(generic Grid, l ILoc, n int, c *Cell) {
 		gr := generic.(*SquareGrid)
 		offset := ((l.Y * gr.Width) + l.X) * 4
 		vs := gr.vertices[offset : offset+4]

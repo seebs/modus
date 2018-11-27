@@ -215,7 +215,7 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 func (gr *HexGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Cells {
 		for j := range col {
-			fn(gr, ILoc{X: i, Y: j}, &col[j])
+			fn(gr, ILoc{X: i, Y: j}, 1, &col[j])
 		}
 	}
 }
@@ -243,17 +243,17 @@ func (gr *HexGrid) Splash(l ILoc, min, max int, fn GridFunc) {
 		min = 0
 	}
 	if min == 0 {
-		fn(gr, l, &gr.Cells[l.X][l.Y])
+		fn(gr, l, 0, &gr.Cells[l.X][l.Y])
 		min++
 	}
 	for depth := min; depth <= max; depth++ {
 		for idx, vec := range hexDirections {
 			loc := gr.Add(l, vec.Times(depth))
 			right := hexDirections[(idx+2)%len(hexDirections)]
-			fn(gr, loc, &gr.Cells[loc.X][loc.Y])
+			fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y])
 			for i := 1; i < depth; i++ {
 				loc = gr.Add(loc, right)
-				fn(gr, loc, &gr.Cells[loc.X][loc.Y])
+				fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y])
 			}
 		}
 	}
