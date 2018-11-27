@@ -1,7 +1,7 @@
 package g
 
 import (
-	"math"
+	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
 )
@@ -51,7 +51,7 @@ func (v IVec) HexVec() HexVec {
 type HexGrid struct {
 	Width, Height       int
 	hexWidth, hexHeight float32
-	perHexHeight        float64
+	perHexHeight        float32
 	Palette             *Palette
 	Cells               [][]Cell
 	render              RenderType
@@ -68,12 +68,13 @@ type HexGrid struct {
 // row of hexes will be half a hex offset.
 func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 	gr := &HexGrid{render: r, Width: w}
-	hexWidth := math.Floor(float64(sx) / (float64(w) + 0.5))
+	hexWidth := math.Floor(float32(sx) / (float32(w) + 0.5))
 	// make it an even number, so the half-hex offset rows don't
 	// look funny
 	if int(hexWidth)&1 == 1 {
 		hexWidth--
 	}
+
 	// the full height of a hex is 2/sqrt(3) times the width, but
 	// each additional row costs only 3/4 that much.
 	hexHeight := math.Floor(2 / math.Sqrt(3) * hexWidth)
@@ -83,13 +84,13 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 	// 4h/x = 3n + 1
 	// (4h/x - 1) = 3n
 	// (4h/x - 1)/3 = n
-	vHexes := math.Floor((float64(sy)*4/hexHeight - 1) / 3)
+	vHexes := math.Floor((float32(sy)*4/hexHeight - 1) / 3)
 
 	gr.hexWidth = float32(hexWidth)
 	gr.hexHeight = float32(hexHeight)
 	gr.perHexHeight = 3 * hexHeight / 4
 	totalHeight := float32((3*vHexes + 1) * hexHeight / 4)
-	totalWidth := float32(hexWidth * (float64(w) + 0.5))
+	totalWidth := float32(hexWidth * (float32(w) + 0.5))
 	gr.ox, gr.oy = (float32(sx)-totalWidth)/2, (float32(sy)-totalHeight)/2
 	gr.Height = int(vHexes)
 
@@ -128,8 +129,8 @@ func (gr *HexGrid) center(row, col int, scale float32) (x, y float32) {
 
 func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
 	x, y = x-int(gr.ox), y-int(gr.oy)
-	xInt, xOffset := math.Modf(float64(x) / float64(gr.hexWidth))
-	yInt, yOffset := math.Modf(float64(y) / float64(gr.perHexHeight))
+	xInt, xOffset := math.Modf(float32(x) / gr.hexWidth)
+	yInt, yOffset := math.Modf(float32(y) / gr.perHexHeight)
 	xOffset -= 0.5
 	xAway := math.Abs(xOffset) / 0.5
 	//	fmt.Printf("%d, %d => %.0f [%.3f] [+%.3f], %.0f [%.3f]", x, y, xInt, xOffset, xAway, yInt, yOffset)

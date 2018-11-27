@@ -1,8 +1,9 @@
 package g
 
 import (
-	"math"
 	"math/rand"
+
+	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
 )
@@ -18,7 +19,7 @@ type SquareGrid struct {
 	// not really a depth anymore; selects which of several textures to use
 	render RenderType
 	ox, oy int
-	scale  float64 // actual size in pixels. integer plz.
+	scale  float32 // actual size in pixels. integer plz.
 }
 
 func (gr *SquareGrid) RandRow() int {
@@ -46,14 +47,14 @@ func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
 
 func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 	var h int
-	var scale float64
+	var scale float32
 	if sx > sy {
-		scale = math.Floor(float64(sx) / float64(w))
-		h = int(math.Floor(float64(sy) / scale))
+		scale = math.Floor(float32(sx) / float32(w))
+		h = int(math.Floor(float32(sy) / scale))
 	} else {
 		// compute sizes for portrait mode, then flip x and y
-		scale = math.Floor(float64(sy) / float64(w))
-		h = int(math.Floor(float64(sx) / scale))
+		scale = math.Floor(float32(sy) / float32(w))
+		h = int(math.Floor(float32(sx) / scale))
 		w, h = h, w
 	}
 	textureSetup()
