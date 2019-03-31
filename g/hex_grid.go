@@ -6,40 +6,49 @@ import (
 	"github.com/hajimehoshi/ebiten"
 )
 
-// HexLoc is a mapping from ILoc to cubic coordinates
+// HexVec is a 3-coordinate vector that can be used to modify
+// a location on a grid. Z = +X-Y. We don't enforce consistency
+// on this; we just add the coordinates and expect it to work out.
 type HexVec struct {
-	X, Y, Z int
-}
-
-type HexLoc struct {
 	X, Y, Z int
 }
 
 var hexDirections = []IVec{
 	{X: 1, Y: 0},
-	{X: 1, Y: -1},
+	{X: 1, Y: -1}, // +Z
 	{X: 0, Y: -1},
 	{X: -1, Y: 0},
-	{X: -1, Y: 1},
+	{X: -1, Y: 1}, // -Z
 	{X: 0, Y: 1},
 }
 
-func (l HexLoc) ILoc() ILoc {
-	return ILoc{X: l.X, Y: l.Y}
-}
-
+// IVec converts a HexVec back to an IVec, by applying the Z
+// vector changes.
 func (v HexVec) IVec() IVec {
-	return IVec{X: v.X, Y: v.Y}
+	return IVec{X: v.X + v.Z, Y: v.Y - v.Z}
 }
 
-func (l ILoc) HexLoc() HexLoc {
-	return HexLoc{X: l.X, Y: l.Y, Z: -l.X - l.Y}
-}
-
+// HexVec converts an IVec to a hex vector with Z=0.
 func (v IVec) HexVec() HexVec {
-	return HexVec{X: v.X, Y: v.Y, Z: -v.X - v.Y}
+	return HexVec{X: v.X, Y: v.Y}
 }
 
+// FloatingHexCell represents a floating cell which also supports Z
+// translation.
+type FloatingHexCell struct {
+	FloatingCellBase
+	z float32
+}
+
+func (f *FloatingHexCell) Z() *float32 {
+	return &f.z
+}
+
+// HexGrid represents a hexagonal grid, approximately using axial
+// coordinates.
+//
+// https://www.redblobgames.com/grids/hexagons/
+//
 // We use offsets, so each direction has the same impact on coordinates
 // regardless of row. Coordinates wrap; on a 5x4 grid, for instance,
 // the coordinates {-1,2} and {4,2} denote the same location.
@@ -48,13 +57,16 @@ func (v IVec) HexVec() HexVec {
 //       0,1     1,1     2,1     3,1     4,1
 //  -1,2     0,2     1,2     2,2     3,2
 //      -1,3     0,3     1,3     2,3     3,3
+//
+// For 3 coordinates, we call the direction with +X/-Y "+Z", and
+// the direction with -X/+Y "-Z".
 type HexGrid struct {
 	Width, Height       int
 	hexWidth, hexHeight float32
 	perHexHeight        float32
 	Palette             *Palette
 	Cells               [][]Cell
-	ExtraCells          []*FloatingCell
+	ExtraCells          []*FloatingHexCell
 	render              RenderType
 	vertices            []ebiten.Vertex
 	indices             []uint16
@@ -116,8 +128,8 @@ func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
 }
 
 // NewExtraCell yields a new FloatingCell, in ExtraCells.
-func (gr *HexGrid) NewExtraCell() *FloatingCell {
-	c := &FloatingCell{}
+func (gr *HexGrid) NewExtraCell() FloatingCell {
+	c := &FloatingHexCell{}
 	gr.ExtraCells = append(gr.ExtraCells, c)
 	return c
 }

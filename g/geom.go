@@ -25,6 +25,7 @@ type IVec struct {
 	X, Y int
 }
 
+// Times multiplies a vector by a scalar.
 func (v IVec) Times(n int) IVec {
 	return IVec{X: v.X * n, Y: v.Y * n}
 }
@@ -103,23 +104,29 @@ type Affine struct {
 	A, B, C, D, E, F float32
 }
 
+// Vec represents motion (contrast time.Duration).
 type Vec struct {
 	X, Y float32
 }
 
+// Point represents a location (contrast time.Time).
 type Point struct {
 	X, Y float32
 }
 
+// Project projects a given vector through an affine matrix. Because
+// vectors represent motion, not position, the translation of the matrix
+// is ignored.
 func (v Vec) Project(a *Affine) Vec {
 	return Vec{X: a.A*v.X + a.C*v.Y, Y: a.B*v.X + a.D*v.Y}
 }
 
+// Project projects a given point through an affine matrix.
 func (p Point) Project(a *Affine) Point {
 	return Point{X: a.A*p.X + a.C*p.Y + a.E, Y: a.B*p.X + a.D*p.Y + a.F}
 }
 
-// Project applies the affine matrix.
+// Project applies the affine matrix, including translation.
 func (a Affine) Project(x0, y0 float32) (x1, y1 float32) {
 	return a.A*x0 + a.C*y0 + a.E, a.B*x0 + a.D*y0 + a.F
 }

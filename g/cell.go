@@ -14,11 +14,34 @@ type Cell struct {
 	Scale float32
 }
 
+type FloatingCell interface {
+	Cell() *Cell
+	X() *float32
+	Y() *float32
+	Z() *float32
+}
+
 // FloatingCell represents a single floating cell, which may be rendered
 // in a non-integer location over a grid.
-type FloatingCell struct {
-	Cell
-	X, Y float32
+type FloatingCellBase struct {
+	cell Cell
+	x, y float32
+}
+
+func (f *FloatingCellBase) Cell() *Cell {
+	return &f.cell
+}
+
+func (f *FloatingCellBase) X() *float32 {
+	return &f.x
+}
+
+func (f *FloatingCellBase) Y() *float32 {
+	return &f.y
+}
+
+func (f *FloatingCellBase) Z() *float32 {
+	return nil
 }
 
 // IncTheta rotates the given cell by t.

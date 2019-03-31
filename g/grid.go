@@ -13,7 +13,7 @@ type SquareGrid struct {
 	Width, Height int
 	Cells         [][]Cell
 	Palette       *Palette
-	ExtraCells    []*FloatingCell
+	ExtraCells    []*FloatingCellBase
 	vertices      []ebiten.Vertex
 	base          []ebiten.Vertex
 	indices       []uint16
@@ -114,10 +114,10 @@ type Grid interface {
 	Neighbors(ILoc, GridFunc)
 	Splash(ILoc, int, int, GridFunc)
 	Iterate(GridFunc)
-	NewExtraCell() *FloatingCell
+	NewExtraCell() FloatingCell
 }
 
-// A SquareGridFunc is a general callback for operations on the grid.
+// GridFunc is a general callback for operations on the grid.
 type GridFunc func(gr Grid, l ILoc, n int, c *Cell)
 
 // Iterate runs fn on the entire grid.
@@ -129,26 +129,36 @@ func (gr *SquareGrid) Iterate(fn GridFunc) {
 	}
 }
 
-// NewExtraCell yields a new FloatingCell, in ExtraCells.
-func (gr *SquareGrid) NewExtraCell() *FloatingCell {
-	c := &FloatingCell{}
+// NewExtraCell yields a new FloatingCell, which is stored in ExtraCells.
+func (gr *SquareGrid) NewExtraCell() FloatingCell {
+	c := &FloatingCellBase{}
 	gr.ExtraCells = append(gr.ExtraCells, c)
+	// add vertex storage for extra cell
+	offset := uint16(len(gr.vertices))
+	gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.render]...)
+	gr.indices = append(gr.indices,
+		offset+0, offset+1, offset+2,
+		offset+2, offset+1, offset+3)
 	return c
 }
 
+// At returns the cell at a grid location.
 func (gr *SquareGrid) At(l ILoc) *Cell {
 	return &gr.Cells[l.X][l.Y]
 }
 
+// IncP increments P (paint color) at a given location.
 func (gr *SquareGrid) IncP(l ILoc, n int) {
 	sq := &gr.Cells[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
 }
 
+// IncAlpha increments alpha at a given location.
 func (gr *SquareGrid) IncAlpha(l ILoc, a float32) {
 	gr.Cells[l.X][l.Y].IncAlpha(a)
 }
 
+// IncTheta increments theta at a given location.
 func (gr *SquareGrid) IncTheta(l ILoc, t float32) {
 	gr.Cells[l.X][l.Y].IncTheta(t)
 }
@@ -184,6 +194,40 @@ func (gr *SquareGrid) Neighbors(l ILoc, fn GridFunc) {
 	gr.Splash(l, 1, 1, fn)
 }
 
+func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l ILoc, xscale, yscale float32) {
+	vs = vs[0:4]
+	// xscale and yscale are actually half the size of a default square.
+	// thus, dx/dy are the offsets (whether positive or negative) of
+	// the sides of the square, scaled appropriately for this individual
+	// square's scale.
+	dx, dy := xscale*c.Scale, yscale*c.Scale
+	// we want to be a half-square offset, and we have a half-square size,
+	// so X*2+1 => the center of square X.
+	ox, oy := xscale*(float32(l.X*2)+1), yscale*(float32(l.Y*2)+1)
+	if c.Theta != 0 {
+		a := IdentityAffine()
+		a.Rotate(c.Theta)
+		a.Scale(dx, dy)
+		a.E, a.F = ox, oy
+		vs[0].DstX, vs[0].DstY = a.Project(-1, 1)
+		vs[1].DstX, vs[1].DstY = a.Project(1, 1)
+		vs[2].DstX, vs[2].DstY = a.Project(-1, -1)
+		vs[3].DstX, vs[3].DstY = a.Project(1, -1)
+	} else {
+		// no rotation, so we can just adjust up or down
+		// by the scale we're using.
+		vs[0].DstX, vs[0].DstY = ox-dx, oy-dy
+		vs[1].DstX, vs[1].DstY = ox+dx, oy-dy
+		vs[2].DstX, vs[2].DstY = ox-dx, oy+dy
+		vs[3].DstX, vs[3].DstY = ox+dx, oy+dy
+	}
+	r, g, b, _ := gr.Palette.Float32(c.P)
+	vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, c.Alpha
+	vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, c.Alpha
+	vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, c.Alpha
+	vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, c.Alpha
+}
+
 // Draw displays the grid on the target screen.
 func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	w, h := target.Size()
@@ -192,40 +236,12 @@ func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	xscale := float32(w) / float32(gr.Width) / 2
 	yscale := float32(h) / float32(gr.Height) / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
+	var offset int
 	gr.Iterate(func(generic Grid, l ILoc, n int, c *Cell) {
 		gr := generic.(*SquareGrid)
-		offset := ((l.Y * gr.Width) + l.X) * 4
-		vs := gr.vertices[offset : offset+4]
-		// xscale and yscale are actually half the size of a default square.
-		// thus, dx/dy are the offsets (whether positive or negative) of
-		// the sides of the square, scaled appropriately for this individual
-		// square's scale.
-		dx, dy := xscale*c.Scale, yscale*c.Scale
-		// we want to be a half-square offset, and we have a half-square size,
-		// so X*2+1 => the center of square X.
-		ox, oy := xscale*(float32(l.X*2)+1), yscale*(float32(l.Y*2)+1)
-		if c.Theta != 0 {
-			a := IdentityAffine()
-			a.Rotate(c.Theta)
-			a.Scale(dx, dy)
-			a.E, a.F = ox, oy
-			vs[0].DstX, vs[0].DstY = a.Project(-1, 1)
-			vs[1].DstX, vs[1].DstY = a.Project(1, 1)
-			vs[2].DstX, vs[2].DstY = a.Project(-1, -1)
-			vs[3].DstX, vs[3].DstY = a.Project(1, -1)
-		} else {
-			// no rotation, so we can just adjust up or down
-			// by the scale we're using.
-			vs[0].DstX, vs[0].DstY = ox-dx, oy-dy
-			vs[1].DstX, vs[1].DstY = ox+dx, oy-dy
-			vs[2].DstX, vs[2].DstY = ox-dx, oy+dy
-			vs[3].DstX, vs[3].DstY = ox+dx, oy+dy
-		}
-		r, g, b, _ := gr.Palette.Float32(c.P)
-		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, c.Alpha
-		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, c.Alpha
-		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, c.Alpha
-		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, c.Alpha
+		offset = ((l.Y * gr.Width) + l.X) * 4
+		gr.drawCell(gr.vertices[offset:offset+4], c, l, xscale, yscale)
 	})
+	// draw extra cells
 	target.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
 }
