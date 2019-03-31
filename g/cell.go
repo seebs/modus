@@ -15,7 +15,8 @@ type Cell struct {
 }
 
 type FloatingCell interface {
-	Cell() *Cell
+	C() *Cell
+	Loc() *FLoc
 	X() *float32
 	Y() *float32
 	Z() *float32
@@ -24,20 +25,24 @@ type FloatingCell interface {
 // FloatingCell represents a single floating cell, which may be rendered
 // in a non-integer location over a grid.
 type FloatingCellBase struct {
-	cell Cell
-	x, y float32
+	Cell
+	loc FLoc
 }
 
-func (f *FloatingCellBase) Cell() *Cell {
-	return &f.cell
+func (f *FloatingCellBase) C() *Cell {
+	return &f.Cell
+}
+
+func (f *FloatingCellBase) Loc() *FLoc {
+	return &f.loc
 }
 
 func (f *FloatingCellBase) X() *float32 {
-	return &f.x
+	return &f.loc.X
 }
 
 func (f *FloatingCellBase) Y() *float32 {
-	return &f.y
+	return &f.loc.Y
 }
 
 func (f *FloatingCellBase) Z() *float32 {

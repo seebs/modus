@@ -108,7 +108,7 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 type Grid interface {
 	Add(ILoc, IVec) ILoc
 	At(ILoc) *Cell
-	IncP(ILoc, int)
+	IncP(ILoc, int) Paint
 	IncAlpha(ILoc, float32)
 	IncTheta(ILoc, float32)
 	Neighbors(ILoc, GridFunc)
@@ -131,7 +131,7 @@ func (gr *SquareGrid) Iterate(fn GridFunc) {
 
 // NewExtraCell yields a new FloatingCell, which is stored in ExtraCells.
 func (gr *SquareGrid) NewExtraCell() FloatingCell {
-	c := &FloatingCellBase{}
+	c := &FloatingCellBase{Cell: Cell{Scale: 1.0, Alpha: 1.0}}
 	gr.ExtraCells = append(gr.ExtraCells, c)
 	// add vertex storage for extra cell
 	offset := uint16(len(gr.vertices))
@@ -148,9 +148,10 @@ func (gr *SquareGrid) At(l ILoc) *Cell {
 }
 
 // IncP increments P (paint color) at a given location.
-func (gr *SquareGrid) IncP(l ILoc, n int) {
+func (gr *SquareGrid) IncP(l ILoc, n int) Paint {
 	sq := &gr.Cells[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
+	return sq.P
 }
 
 // IncAlpha increments alpha at a given location.
@@ -194,7 +195,7 @@ func (gr *SquareGrid) Neighbors(l ILoc, fn GridFunc) {
 	gr.Splash(l, 1, 1, fn)
 }
 
-func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l ILoc, xscale, yscale float32) {
+func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l FLoc, xscale, yscale float32) {
 	vs = vs[0:4]
 	// xscale and yscale are actually half the size of a default square.
 	// thus, dx/dy are the offsets (whether positive or negative) of
@@ -203,7 +204,7 @@ func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l ILoc, xscale, ysca
 	dx, dy := xscale*c.Scale, yscale*c.Scale
 	// we want to be a half-square offset, and we have a half-square size,
 	// so X*2+1 => the center of square X.
-	ox, oy := xscale*(float32(l.X*2)+1), yscale*(float32(l.Y*2)+1)
+	ox, oy := xscale*((l.X*2)+1), yscale*((l.Y*2)+1)
 	if c.Theta != 0 {
 		a := IdentityAffine()
 		a.Rotate(c.Theta)
@@ -240,8 +241,15 @@ func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	gr.Iterate(func(generic Grid, l ILoc, n int, c *Cell) {
 		gr := generic.(*SquareGrid)
 		offset = ((l.Y * gr.Width) + l.X) * 4
-		gr.drawCell(gr.vertices[offset:offset+4], c, l, xscale, yscale)
+		gr.drawCell(gr.vertices[offset:offset+4], c, l.FLoc(), xscale, yscale)
 	})
+	offset = gr.Width * gr.Height * 4
 	// draw extra cells
+	for _, c := range gr.ExtraCells {
+		vs := gr.vertices[offset : offset+4]
+		copy(vs, squareVerticesByDepth[c.Cell.R])
+		gr.drawCell(vs, &c.Cell, *c.Loc(), xscale, yscale)
+		offset += 4
+	}
 	target.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
 }

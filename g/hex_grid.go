@@ -245,9 +245,10 @@ func (gr *HexGrid) At(l ILoc) *Cell {
 	return &gr.Cells[l.X][l.Y]
 }
 
-func (gr *HexGrid) IncP(l ILoc, n int) {
+func (gr *HexGrid) IncP(l ILoc, n int) Paint {
 	sq := &gr.Cells[l.X][l.Y]
 	sq.P = gr.Palette.Inc(sq.P, n)
+	return sq.P
 }
 
 func (gr *HexGrid) IncAlpha(l ILoc, a float32) {
