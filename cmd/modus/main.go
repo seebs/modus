@@ -5,13 +5,12 @@ import (
 	"fmt"
 	_ "image/png"
 	"log"
-	"math"
-	"math/rand"
 	"os"
 	"runtime/pprof"
 	"time"
 
 	"seebs.net/modus/g"
+	"seebs.net/modus/modes"
 
 	"github.com/hajimehoshi/ebiten"
 
@@ -25,12 +24,6 @@ const (
 
 var (
 	gctx     *g.Context
-	grid     *g.SquareGrid
-	hg       *g.HexGrid
-	line     *g.PolyLine
-	spirals  []*g.Spiral
-	knights  []g.ILoc
-	knight   int
 	timedOut <-chan time.Time
 	tx       = 640
 	ty       = 240
@@ -38,23 +31,8 @@ var (
 	dty      = 1
 	num      = 20
 	voice    *Voice
-	splat    *ebiten.Image
+	scene    modes.Scene
 )
-
-var knightMoves = []g.IVec{
-	{-2, -1},
-	{-1, -2},
-	{1, -2},
-	{2, -1},
-	{2, 1},
-	{1, 2},
-	{-1, 2},
-	{-2, 1},
-}
-
-func knightMove() g.IVec {
-	return knightMoves[int(rand.Int31n(int32(len(knightMoves))))]
-}
 
 var lagCounter = 0
 var pause = false
@@ -130,45 +108,15 @@ func update(screen *ebiten.Image) error {
 	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
-		grid.Iterate(func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
-			c.IncAlpha(-0.001)
-		})
-		k := &knights[knight]
-		*k = grid.Add(*k, knightMove())
-		grid.IncP(*k, 2)
-		grid.IncAlpha(*k, 0.2)
-		grid.Splash(*k, 1, 1, func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
-			gr.IncP(l, 1)
-			c.IncAlpha(0.1)
-		})
-		hg.Iterate(func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
-			c.IncAlpha(-0.001)
-		})
-
-		knight = (knight + 1) % len(knights)
-		for idx, s := range spirals {
-			bounced, note, loc := s.Update()
-			if bounced && sound {
-				voice.Play(note+5*idx, 90)
-			}
-			hl, hcell := hg.CellAt(int(loc.X), int(loc.Y))
-			if hcell != nil {
-				if hl != prevLocs[idx] {
-					prevLocs[idx] = hl
-					hcell.P = g.Paint(note)
-					hcell.Alpha = 1
-				}
-			}
+		err := scene.Tick()
+		if err != nil {
+			return err
 		}
 	}
-
-	gctx.Render(screen, func(t *ebiten.Image, scale float32) {
-		// grid.Draw(t, scale)
-		hg.Draw(t, scale)
-		for _, s := range spirals {
-			s.Draw(t, scale)
-		}
-	})
+	err := scene.Draw(screen)
+	if err != nil {
+		return err
+	}
 
 	select {
 	case <-timedOut:
@@ -220,29 +168,19 @@ func main() {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
-	grid = gctx.NewSquareGrid(num, 1)
-	grid.Palette = g.Palettes["rainbow"]
-	hg = gctx.NewHexGrid(num, 0)
-	hg.Palette = g.Palettes["rainbow"]
-
-	grid.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
-		gr := generic.(*g.SquareGrid)
-		gr.Squares[l.X][l.Y].P = gr.Palette.Paint(3)
-	})
-	for i := 0; i < 1; i++ {
-		knights = append(knights, g.ILoc{X: 10, Y: 10})
-	}
-	for i := 0; i < 3; i++ {
-		spiral := gctx.NewSpiral(11, 1, 400, g.Palettes["rainbow"], 3, i*2)
-		spiral.Center = g.MovingPoint{Loc: g.Point{X: float32(screenWidth) / 2, Y: float32(screenHeight) / 2}}
-		spiral.Target = g.MovingPoint{Loc: g.Point{X: rand.Float32() * screenWidth, Y: rand.Float32() * screenHeight}, Velocity: g.Vec{X: rand.Float32()*30 - 15, Y: rand.Float32()*30 - 15}}
-		spiral.Target.SetBounds(screenWidth, screenHeight)
-		spiral.Theta = 8 * math.Pi
-		spiral.Step = 2
-		spirals = append(spirals, spiral)
-		prevLocs = append(prevLocs, g.ILoc{})
+	modes := modes.ListModes()
+	mode := modes[0]
+	fmt.Printf("found mode: %s\n", mode.Name())
+	scene, err = mode.New(gctx, 20, g.Palettes["rainbow"])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "scene error: %v\n", err)
+		os.Exit(1)
 	}
 	voice, err = NewVoice("breath", 8)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "voice error: %v\n", err)
+		os.Exit(1)
+	}
 	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "frames: %d, TPS %.2f\n", frames, tps/float64(frames))
 		fmt.Fprintf(os.Stderr, "exiting: %s\n", err)
