@@ -55,7 +55,7 @@ func lineSetup() {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func newPolyLine(p *Palette, r RenderType, thickness int) *PolyLine {
+func newPolyLine(thickness int, r RenderType, p *Palette) *PolyLine {
 	initLineData.Do(lineSetup)
 	if r > 3 {
 		r = 3
@@ -66,7 +66,7 @@ func newPolyLine(p *Palette, r RenderType, thickness int) *PolyLine {
 
 func (pl *PolyLine) Debug(enable bool) {
 	if enable {
-		pl.debug = newPolyLine(pl.Palette, 1, 2)
+		pl.debug = newPolyLine(2, 1, pl.Palette)
 		pl.debug.Thickness = 2
 	} else {
 		pl.debug = nil

@@ -43,7 +43,7 @@ func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offs
 	s.thetas = make([]float32, s.Length)
 	s.SetThetaRatio(defaultThetaRatio)
 	for i := 0; i < s.Depth; i++ {
-		l := newPolyLine(s.Palette, r, 3)
+		l := newPolyLine(3, r, s.Palette)
 		l.Joined = true
 		l.Blend = true
 		l.Points = make([]LinePoint, s.Length)

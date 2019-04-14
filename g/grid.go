@@ -12,7 +12,7 @@ import (
 type SquareGrid struct {
 	Width, Height int
 	Cells         [][]Cell
-	Palette       *Palette
+	palette       *Palette
 	ExtraCells    []*FloatingCellBase
 	vertices      []ebiten.Vertex
 	base          []ebiten.Vertex
@@ -51,7 +51,11 @@ func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
 	return ILoc{X: x, Y: y}
 }
 
-func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
+func (gr *SquareGrid) Palette() *Palette {
+	return gr.palette
+}
+
+func newSquareGrid(w int, r RenderType, p *Palette, sx, sy int) *SquareGrid {
 	var h int
 	var scale float32
 	if sx > sy {
@@ -65,13 +69,14 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 	}
 	textureSetup()
 	gr := SquareGrid{
-		Width:  w,
-		Height: h,
-		render: r,
-		scale:  scale,
-		ox:     (sx - int(scale)*w) / 2,
-		oy:     (sy - int(scale)*h) / 2,
-		base:   squareVerticesByDepth[r],
+		Width:   w,
+		Height:  h,
+		render:  r,
+		palette: p,
+		scale:   scale,
+		ox:      (sx - int(scale)*w) / 2,
+		oy:      (sy - int(scale)*h) / 2,
+		base:    squareVerticesByDepth[r],
 	}
 	gr.Cells = make([][]Cell, gr.Width)
 	for idx := range gr.Cells {
@@ -106,12 +111,14 @@ func newSquareGrid(w int, r RenderType, sx, sy int) *SquareGrid {
 }
 
 type Grid interface {
+	NewLoc() ILoc
 	Add(ILoc, IVec) ILoc
 	At(ILoc) *Cell
 	IncP(ILoc, int) Paint
 	IncAlpha(ILoc, float32)
 	IncTheta(ILoc, float32)
 	Neighbors(ILoc, GridFunc)
+	Palette() *Palette
 	Splash(ILoc, int, int, GridFunc)
 	Iterate(GridFunc)
 	NewExtraCell() FloatingCell
@@ -150,7 +157,7 @@ func (gr *SquareGrid) At(l ILoc) *Cell {
 // IncP increments P (paint color) at a given location.
 func (gr *SquareGrid) IncP(l ILoc, n int) Paint {
 	sq := &gr.Cells[l.X][l.Y]
-	sq.P = gr.Palette.Inc(sq.P, n)
+	sq.P = gr.palette.Inc(sq.P, n)
 	return sq.P
 }
 
@@ -222,7 +229,7 @@ func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l FLoc, xscale, ysca
 		vs[2].DstX, vs[2].DstY = ox-dx, oy+dy
 		vs[3].DstX, vs[3].DstY = ox+dx, oy+dy
 	}
-	r, g, b, _ := gr.Palette.Float32(c.P)
+	r, g, b, _ := gr.palette.Float32(c.P)
 	vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, c.Alpha
 	vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, c.Alpha
 	vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, c.Alpha

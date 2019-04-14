@@ -1,6 +1,8 @@
 package g
 
 import (
+	"math/rand"
+
 	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
@@ -64,7 +66,7 @@ type HexGrid struct {
 	Width, Height       int
 	hexWidth, hexHeight float32
 	perHexHeight        float32
-	Palette             *Palette
+	palette             *Palette
 	Cells               [][]Cell
 	ExtraCells          []*FloatingHexCell
 	render              RenderType
@@ -73,14 +75,32 @@ type HexGrid struct {
 	ox, oy              float32 // offset to draw grid at for centering
 }
 
+func (gr *HexGrid) Palette() *Palette {
+	return gr.palette
+}
+
+// RandRow yields a random valid row.
+func (gr *HexGrid) RandRow() int {
+	return int(rand.Int31n(int32(gr.Height)))
+}
+
+// RandCol yields a random valid column.
+func (gr *HexGrid) RandCol() int {
+	return int(rand.Int31n(int32(gr.Width)))
+}
+
+func (gr *HexGrid) NewLoc() ILoc {
+	return ILoc{X: gr.RandCol(), Y: gr.RandRow()}
+}
+
 // make a new hex grid. since hexes aren't interchangeable, we can't
 // just flip X and Y...
 //
 // we start with the easy one: we use the flat ends, so the width of
 // the row is trivial, except we need an extra half-hex, because a second
 // row of hexes will be half a hex offset.
-func newHexGrid(w int, r RenderType, sx, sy int) *HexGrid {
-	gr := &HexGrid{render: r, Width: w}
+func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
+	gr := &HexGrid{render: r, Width: w, palette: p}
 	hexWidth := math.Floor(float32(sx) / (float32(w) + 0.5))
 	// make it an even number, so the half-hex offset rows don't
 	// look funny
@@ -211,7 +231,7 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 	for col, colCells := range gr.Cells {
 		for row, cell := range colCells {
 			tri := gr.vertices[offset : offset+3]
-			r, g, b, _ := gr.Palette.Float32(cell.P)
+			r, g, b, _ := gr.palette.Float32(cell.P)
 			a := cell.Alpha
 			var aff Affine
 			if cell.Theta != 0 || cell.Scale != 1 {
@@ -247,7 +267,7 @@ func (gr *HexGrid) At(l ILoc) *Cell {
 
 func (gr *HexGrid) IncP(l ILoc, n int) Paint {
 	sq := &gr.Cells[l.X][l.Y]
-	sq.P = gr.Palette.Inc(sq.P, n)
+	sq.P = gr.palette.Inc(sq.P, n)
 	return sq.P
 }
 

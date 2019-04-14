@@ -34,14 +34,14 @@ func NewContext(w, h int, multisample bool) *Context {
 
 // NewSquareGrid returns a grid of squares with width "w"
 // across its wider dimension.
-func (c *Context) NewSquareGrid(w int, r RenderType) *SquareGrid {
-	return newSquareGrid(w, r, c.w, c.h)
+func (c *Context) NewSquareGrid(w int, r RenderType, p *Palette) *SquareGrid {
+	return newSquareGrid(w, r, p, c.w, c.h)
 }
 
 // NewHexGrid returns a grid of hexes with width "w"
 // across its wider dimension.
-func (c *Context) NewHexGrid(w int, r RenderType) *HexGrid {
-	return newHexGrid(w, r, c.w, c.h)
+func (c *Context) NewHexGrid(w int, r RenderType, p *Palette) *HexGrid {
+	return newHexGrid(w, r, p, c.w, c.h)
 }
 
 // NewSpiral returns a spiral for the given Context.
@@ -49,8 +49,8 @@ func (c *Context) NewSpiral(depth int, r RenderType, points int, p *Palette, cyc
 	return newSpiral(depth, r, points, p, cycles, offset)
 }
 
-func (c *Context) NewPolyline(p *Palette, r RenderType, thickness int) *PolyLine {
-	return newPolyLine(p, r, thickness)
+func (c *Context) NewPolyline(thickness int, r RenderType, p *Palette) *PolyLine {
+	return newPolyLine(thickness, r, p)
 }
 
 func (c *Context) DrawSize() (int, int) {
