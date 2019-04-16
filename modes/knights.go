@@ -1,6 +1,7 @@
 package modes
 
 import (
+	"fmt"
 	"math/rand"
 
 	"github.com/hajimehoshi/ebiten"
@@ -24,23 +25,22 @@ func knightMove() g.IVec {
 
 // knightMode is one of the internal modes based on knight moves
 type knightMode struct {
+	k int // knights
 }
-
-var knights1 knightMode
 
 func init() {
-	allModes = append(allModes, &knights1)
+	allModes = append(allModes, knightMode{k: 1}, knightMode{k: 2}, knightMode{k: 3}, knightMode{k: 4})
 }
 
-func (m *knightMode) Name() string {
-	return "knights"
+func (m knightMode) Name() string {
+	return fmt.Sprintf("knights%d", m.k)
 }
 
-func (m *knightMode) Description() string {
-	return "knights jumping"
+func (m knightMode) Description() string {
+	return fmt.Sprintf("%d knights jumping", m.k)
 }
 
-func (m *knightMode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error) {
+func (m knightMode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error) {
 	return newKnightScene(m, gctx, detail, p)
 }
 
@@ -62,14 +62,14 @@ type knightScene struct {
 	nextKnight int
 	palette    *g.Palette
 	gctx       *g.Context
-	mode       *knightMode
+	mode       knightMode
 	knights    []knight
 	detail     int
 	gr         *g.SquareGrid
 }
 
-func newKnightScene(m *knightMode, gctx *g.Context, detail int, p *g.Palette) (*knightScene, error) {
-	sc := &knightScene{mode: m, gctx: gctx, detail: detail, palette: p, knights: make([]knight, 6)}
+func newKnightScene(m knightMode, gctx *g.Context, detail int, p *g.Palette) (*knightScene, error) {
+	sc := &knightScene{mode: m, gctx: gctx, detail: detail, palette: p, knights: make([]knight, m.k)}
 	err := sc.Reset(detail, p)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *knightScene) Display() error {
 	s.gr.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
 		c.P = p
 	})
-	for i := 0; i < 6; i++ {
+	for i := 0; i < s.mode.k; i++ {
 		s.knights[i].c = s.gr.NewExtraCell().(*g.FloatingCellBase)
 		s.knights[i].c.Cell.Scale = 0.7
 		l := s.gr.NewLoc()
@@ -109,7 +109,7 @@ func (s *knightScene) Display() error {
 }
 
 func (s *knightScene) Hide() error {
-	for i := 0; i < 6; i++ {
+	for i := 0; i < s.mode.k; i++ {
 		s.knights[i].c = nil
 	}
 	s.gr = nil
@@ -128,7 +128,7 @@ func (s *knightScene) Tick() error {
 		gr.IncP(l, 1)
 		c.IncAlpha(0.1)
 	})
-	s.nextKnight = (s.nextKnight + 1) % 6
+	s.nextKnight = (s.nextKnight + 1) % s.mode.k
 	return nil
 }
 

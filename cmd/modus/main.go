@@ -31,6 +31,8 @@ var (
 	dty      = 1
 	num      = 20
 	voice    *Voice
+	allModes []modes.Mode
+	currentMode int
 	scene    modes.Scene
 )
 
@@ -80,6 +82,7 @@ var keys = keyMap{
 	ebiten.KeyQ:     0,
 	ebiten.KeySpace: 0,
 	ebiten.KeyRight: 0,
+	ebiten.KeyUp: 0,
 }
 
 var frames = 0
@@ -106,6 +109,12 @@ func update(screen *ebiten.Image) error {
 	if keys.Pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
+	if keys.Pressed(ebiten.KeyUp) {
+		err := newMode()
+		if err != nil {
+			return err
+		}
+	}
 
 	if !pause || keys.Released(ebiten.KeyRight) {
 		err := scene.Tick()
@@ -124,6 +133,19 @@ func update(screen *ebiten.Image) error {
 	default:
 		return nil
 	}
+}
+
+func newMode() error {
+	currentMode = (currentMode + 1) % len(allModes)
+	mode := allModes[currentMode]
+	fmt.Printf("new mode: %s\n", mode.Name())
+	if scene != nil {
+		scene.Hide()
+		scene = nil
+	}
+	var err error
+	scene, err = mode.New(gctx, 20, g.Palettes["rainbow"])
+	return err
 }
 
 func main() {
@@ -168,10 +190,9 @@ func main() {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
-	modes := modes.ListModes()
-	mode := modes[0]
-	fmt.Printf("found mode: %s\n", mode.Name())
-	scene, err = mode.New(gctx, 20, g.Palettes["rainbow"])
+	allModes = modes.ListModes()
+	currentMode = -1
+	err = newMode()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scene error: %v\n", err)
 		os.Exit(1)
