@@ -11,6 +11,7 @@ import (
 
 	"seebs.net/modus/g"
 	"seebs.net/modus/modes"
+	"seebs.net/modus/sound"
 
 	"github.com/hajimehoshi/ebiten"
 
@@ -23,17 +24,18 @@ const (
 )
 
 var (
-	gctx     *g.Context
-	timedOut <-chan time.Time
-	tx       = 640
-	ty       = 240
-	dtx      = 0
-	dty      = 1
-	num      = 20
-	voice    *Voice
-	allModes []modes.Mode
+	gctx        *g.Context
+	timedOut    <-chan time.Time
+	tx          = 640
+	ty          = 240
+	dtx         = 0
+	dty         = 1
+	num         = 20
+	voice       *sound.Voice
+	allModes    []modes.Mode
 	currentMode int
-	scene    modes.Scene
+	scene       modes.Scene
+	step        bool
 )
 
 var lagCounter = 0
@@ -82,13 +84,13 @@ var keys = keyMap{
 	ebiten.KeyQ:     0,
 	ebiten.KeySpace: 0,
 	ebiten.KeyRight: 0,
-	ebiten.KeyUp: 0,
+	ebiten.KeyUp:    0,
 }
 
 var frames = 0
 var tps float64
 var tpsStarted bool
-var sound = true
+var useSound = true
 var px, py int
 var prevLocs []g.ILoc
 
@@ -115,9 +117,15 @@ func update(screen *ebiten.Image) error {
 			return err
 		}
 	}
+	if keys.Released(ebiten.KeyRight) {
+		step = true
+	}
 
-	if !pause || keys.Released(ebiten.KeyRight) {
-		err := scene.Tick()
+	if !pause || step {
+		stepped, err := scene.Tick(voice)
+		if stepped {
+			step = false
+		}
 		if err != nil {
 			return err
 		}
@@ -165,7 +173,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 	if opts.Seen("q") {
-		sound = false
+		useSound = false
 	}
 	if opts.Seen("n") {
 		num = opts["n"].Int
@@ -197,10 +205,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "scene error: %v\n", err)
 		os.Exit(1)
 	}
-	voice, err = NewVoice("breath", 8)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "voice error: %v\n", err)
-		os.Exit(1)
+	if useSound {
+		voice, err = sound.NewVoice("breath", 8)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "voice error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if err = ebiten.Run(update, screenWidth, screenHeight, 1, "Miracle Modus"); err != nil {
 		fmt.Fprintf(os.Stderr, "frames: %d, TPS %.2f\n", frames, tps/float64(frames))

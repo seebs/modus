@@ -1,4 +1,4 @@
-package main
+package sound
 
 import (
 	"io/ioutil"
@@ -11,7 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/audio/wav"
 )
 
-var soundDir = "sounds"
+var soundDir = "/home/seebs/src/go/src/seebs.net/modus/sound/sounds"
 
 var ac *audio.Context
 
@@ -74,6 +74,9 @@ func NewVoice(name string, polyphony int) (*Voice, error) {
 }
 
 func (v *Voice) Play(tone, volume int) {
+	if v == nil {
+		return
+	}
 	// NewPlayerFromBytes can't error these days
 	ap, _ := audio.NewPlayerFromBytes(ac, v.tones[tone%len(v.tones)])
 	ap.SetVolume(float64(volume) / 100)

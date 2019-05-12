@@ -6,6 +6,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
+	"seebs.net/modus/sound"
 )
 
 var knightMoves = []g.IVec{
@@ -25,11 +26,25 @@ func knightMove() g.IVec {
 
 // knightMode is one of the internal modes based on knight moves
 type knightMode struct {
-	k int // knights
+	k         int // knights
+	cycleTime int // number of ticks to go by between updates
+}
+
+const knightCycleTime = 10
+
+var knightModes = []knightMode{
+	{k: 1, cycleTime: knightCycleTime},
+	{k: 2, cycleTime: knightCycleTime},
+	{k: 3, cycleTime: knightCycleTime},
+	{k: 4, cycleTime: knightCycleTime},
+	{k: 5, cycleTime: knightCycleTime},
+	{k: 6, cycleTime: knightCycleTime},
 }
 
 func init() {
-	allModes = append(allModes, knightMode{k: 1}, knightMode{k: 2}, knightMode{k: 3}, knightMode{k: 4})
+	for _, mode := range knightModes {
+		allModes = append(allModes, mode)
+	}
 }
 
 func (m knightMode) Name() string {
@@ -66,6 +81,7 @@ type knightScene struct {
 	knights    []knight
 	detail     int
 	gr         *g.SquareGrid
+	cycle      int
 }
 
 func newKnightScene(m knightMode, gctx *g.Context, detail int, p *g.Palette) (*knightScene, error) {
@@ -94,15 +110,18 @@ func (s *knightScene) Reset(detail int, p *g.Palette) error {
 
 func (s *knightScene) Display() error {
 	s.gr = s.gctx.NewSquareGrid(s.detail, 1, s.palette)
-	p := s.gr.Palette().Paint(3)
+	p := s.gr.Palette().Paint(0)
 	s.gr.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
 		c.P = p
 	})
 	for i := 0; i < s.mode.k; i++ {
-		s.knights[i].c = s.gr.NewExtraCell().(*g.FloatingCellBase)
-		s.knights[i].c.Cell.Scale = 0.7
+		c := s.gr.NewExtraCell().(*g.FloatingCellBase)
+		c.Cell.Scale = 0.7
 		l := s.gr.NewLoc()
-		*s.knights[i].c.Loc() = g.FLoc{X: float32(l.X), Y: float32(l.Y)}
+		*c.Loc() = g.FLoc{X: float32(l.X), Y: float32(l.Y)}
+		c.Cell.Alpha = 0
+		s.knights[i].c = c
+		s.knights[i].P = g.Paint(i)
 		s.knights[i].apply()
 	}
 	return nil
@@ -116,20 +135,27 @@ func (s *knightScene) Hide() error {
 	return nil
 }
 
-func (s *knightScene) Tick() error {
+func (s *knightScene) Tick(voice *sound.Voice) (bool, error) {
+	s.cycle = (s.cycle + 1) % s.mode.cycleTime
+	if s.cycle != 0 {
+		return false, nil
+	}
 	s.gr.Iterate(func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
 		c.IncAlpha(-0.001)
 	})
 	k := &s.knights[s.nextKnight]
 	k.ILoc = s.gr.Add(k.ILoc, knightMove())
-	s.gr.IncP(k.ILoc, 2)
+	k.P = s.gr.IncP(k.ILoc, 2)
+	k.c.Cell.Alpha = 1
+	k.apply()
 	s.gr.IncAlpha(k.ILoc, 0.2)
+	voice.Play(int(s.gr.Cells[k.X][k.Y].P), 75)
 	s.gr.Splash(k.ILoc, 1, 1, func(gr g.Grid, l g.ILoc, n int, c *g.Cell) {
 		gr.IncP(l, 1)
 		c.IncAlpha(0.1)
 	})
 	s.nextKnight = (s.nextKnight + 1) % s.mode.k
-	return nil
+	return true, nil
 }
 
 func (s *knightScene) Draw(screen *ebiten.Image) error {
