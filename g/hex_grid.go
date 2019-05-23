@@ -15,6 +15,23 @@ type HexVec struct {
 	X, Y, Z int
 }
 
+type HexDir int
+
+func (h HexDir) IVec() IVec {
+	if h < 0 {
+		return IVec{X: 0, Y: 0}
+	}
+	return hexDirections[h%6]
+}
+
+func (h HexDir) Left() HexDir {
+	return (h + 5) % 6
+}
+
+func (h HexDir) Right() HexDir {
+	return (h + 1) % 6
+}
+
 var hexDirections = []IVec{
 	{X: 1, Y: 0},
 	{X: 1, Y: -1}, // +Z
@@ -75,6 +92,11 @@ type HexGrid struct {
 	ox, oy              float32 // offset to draw grid at for centering
 }
 
+// NewDir yields a random hex direction
+func (gr *HexGrid) NewDir() HexDir {
+	return HexDir(rand.Int31n(6))
+}
+
 func (gr *HexGrid) Palette() *Palette {
 	return gr.palette
 }
@@ -100,6 +122,8 @@ func (gr *HexGrid) NewLoc() ILoc {
 // the row is trivial, except we need an extra half-hex, because a second
 // row of hexes will be half a hex offset.
 func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
+	textureSetup()
+
 	gr := &HexGrid{render: r, Width: w, palette: p}
 	hexWidth := math.Floor(float32(sx) / (float32(w) + 0.5))
 	// make it an even number, so the half-hex offset rows don't
@@ -217,7 +241,6 @@ func (gr *HexGrid) Cell(x, y int) (ILoc, *Cell) {
 }
 
 func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
-	textureSetup()
 	CreateHexTextures()
 
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter, Filter: ebiten.FilterLinear}
