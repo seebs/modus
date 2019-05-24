@@ -6,7 +6,7 @@ import (
 
 	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
-	"github.com/hajimehoshi/ebiten/ebitenutil"
+	// "github.com/hajimehoshi/ebiten/ebitenutil"
 )
 
 // A Dots display represents an arrangement of dots, with locations determined
@@ -24,7 +24,6 @@ type DotGrid struct {
 	depthVertices [][]ebiten.Vertex
 	depthDirty    []bool
 	indices       []uint16
-	depthIndices  [][]uint16
 	sx, sy        float32
 	scale         float32
 	alphaDecay    float32
@@ -115,13 +114,14 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	// the indices don't change
 	quads := dg.W * dg.H
 	dg.vertices = make([]ebiten.Vertex, depth*4*quads)
-	fmt.Printf("vertices: %p\n", &dg.vertices[0])
+	fmt.Printf("vertices: %p (quads %d)\n", &dg.vertices[0], quads)
 	dg.depthVertices = make([][]ebiten.Vertex, dg.depth)
-	dg.indices = make([]uint16, 0, dg.depth*6*quads)
-	dg.depthIndices = make([][]uint16, depth)
+	dg.indices = make([]uint16, 0, 6*quads)
 	dg.states = make([][][]DotGridState, dg.depth)
 	dg.baseDots = make([][]DotGridBase, dg.W)
 	dg.depthDirty = make([]bool, dg.depth)
+
+	offset := uint16(0)
 	for i := range dg.baseDots {
 		dots := make([]DotGridBase, dg.H)
 		dg.baseDots[i] = dots
@@ -129,17 +129,24 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 		for j := range dg.baseDots[i] {
 			y0 := ((float32(j) / float32(dg.H-1)) - 0.5) * 2
 			dots[j].X, dots[j].Y = x0, y0
+			/*
+			 * 0  1
+			 * 2  3
+			 * -> 012, 213
+			 */
+			dg.indices = append(dg.indices,
+				offset+0, offset+1, offset+2,
+				offset+2, offset+1, offset+3)
+			offset += 4
 		}
 	}
-	offset := uint16(0)
+	offset = 0
 	for d := 0; d < dg.depth; d++ {
 		// this is the default, but to clarify: a thing isn't considered
 		// dirty until it gets computed.
 		dg.depthDirty[d] = false
-		dg.depthIndices[d] = dg.indices[quads*d*6 : quads*(d+1)*6]
 		dg.states[d] = make([][]DotGridState, dg.W)
 		dg.depthVertices[d] = dg.vertices[quads*d*4 : quads*(d+1)*4]
-		fmt.Printf("vertices[%d]: %p\n", d, &dg.depthVertices[d][0])
 		for i := 0; i < dg.W; i++ {
 			dg.states[d][i] = make([]DotGridState, dg.H)
 			for j := 0; j < dg.H; j++ {
@@ -148,19 +155,10 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 				vs[1].SrcX, vs[1].SrcY = 15, 1
 				vs[2].SrcX, vs[2].SrcY = 1, 15
 				vs[3].SrcX, vs[3].SrcY = 15, 15
-				/*
-				 * 0  1
-				 * 2  3
-				 * -> 012, 213
-				 */
-				dg.indices = append(dg.indices,
-					offset+0, offset+1, offset+2,
-					offset+2, offset+1, offset+3)
 				offset += 4
 			}
 		}
 	}
-	fmt.Printf("largest index offset %d\n", offset)
 	return dg
 }
 
@@ -171,7 +169,6 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 		return
 	}
 	opt := ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
-	str := ""
 	for d, dirty := range dg.depthDirty {
 		if dirty {
 			dg.drawVertices(dg.states[d], dg.depthVertices[d])
@@ -179,11 +176,8 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 		}
 		opt.ColorM.Reset()
 		opt.ColorM.Scale(1.0, 1.0, 1.0, float64(dg.alphaDecays[d]))
-		target.DrawTriangles(dg.depthVertices[d], dg.depthIndices[0], dotTexture, &opt)
-		str += fmt.Sprintf("tri buffer %d: %p\n", d, &dg.depthVertices[d][0])
+		target.DrawTriangles(dg.depthVertices[d], dg.indices[:dg.W*dg.H*6], dotTexture, &opt)
 	}
-	// target.DrawTriangles(dg.vertices, dg.indices, dotTexture, &opt)
-	ebitenutil.DebugPrint(target, str)
 }
 
 // drawVertices computes the actual vertex contents given the state
