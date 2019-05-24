@@ -13,12 +13,13 @@ type dotGridMode struct {
 	cycleTime int // number of ticks to go by between updates
 	compute   func(x0, y0 float32, s *dotGridScene) (x, y float32, p g.Paint, a float32, scale float32)
 	name      string
+	depth     int
 }
 
 const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
-	{name: "boring", cycleTime: dotGridCycleTime, compute: boringCompute},
+	{name: "boring", depth: 5, cycleTime: dotGridCycleTime, compute: boringCompute},
 }
 
 func boringCompute(x0, y0 float32, s *dotGridScene) (x, y float32, p g.Paint, a float32, scale float32) {
@@ -88,7 +89,7 @@ func (s *dotGridScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *dotGridScene) Display() error {
-	s.gr = s.gctx.NewDotGrid(s.detail, 16, 3, 1, s.palette)
+	s.gr = s.gctx.NewDotGrid(s.detail, 16, s.mode.depth, 1, s.palette)
 	s.gr.Compute = func(x0, y0 float32) (x, y float32, p g.Paint, a float32, scale float32) {
 		return s.mode.compute(x0, y0, s)
 	}

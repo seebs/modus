@@ -1,6 +1,7 @@
 package g
 
 import (
+	"fmt"
 	"sync"
 
 	math "github.com/chewxy/math32"
@@ -21,6 +22,7 @@ type DotGrid struct {
 	indices       []uint16
 	sx, sy        float32
 	scale         float32
+	alphaDecay    float32
 }
 
 type DotGridState struct {
@@ -74,6 +76,13 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	w, h, scale = makeDotGridHeight(w, sx, sy)
 
 	dg := &DotGrid{Palette: p, Thickness: thickness, W: w, H: h, sx: float32(sx), sy: float32(sy), scale: scale, depth: depth}
+	if depth > 1 {
+		dg.alphaDecay = math.Pow(1/float32(depth), 1/float32(depth-1))
+		fmt.Printf("depth %d, decay %f\n", depth, dg.alphaDecay)
+	} else {
+		// unsed
+		dg.alphaDecay = 1.0
+	}
 	// each dot is a quad, which means it's 4 vertices and 6 indices, and
 	// the indices don't change
 	quads := 4 * dg.W * dg.H
@@ -130,7 +139,6 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 			vs[2].DstX, vs[2].DstY = x-s, y+s
 			vs[3].DstX, vs[3].DstY = x+s, y+s
 			r, g, b, _ := dg.Palette.Float32(p)
-			a /= float32(dg.depth)
 			vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, a
 			vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, a
 			vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, a
@@ -146,4 +154,18 @@ func (dg *DotGrid) Tick() {
 	last := dg.depthVertices[dg.depth-1]
 	copy(dg.depthVertices[1:], dg.depthVertices)
 	dg.depthVertices[0] = last
+	// dim the older ones
+	quads := dg.W * dg.H
+	for d := 1; d < dg.depth; d++ {
+		dvs := dg.depthVertices[d]
+		offset := 0
+		for i := 0; i < quads; i++ {
+			vs := dvs[offset : offset+4]
+			vs[0].ColorA *= 0.7
+			vs[1].ColorA *= 0.7
+			vs[2].ColorA *= 0.7
+			vs[3].ColorA *= 0.7
+			offset += 4
+		}
+	}
 }
