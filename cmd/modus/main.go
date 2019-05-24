@@ -152,7 +152,7 @@ func newMode() error {
 		scene = nil
 	}
 	var err error
-	scene, err = mode.New(gctx, 20, g.Palettes["rainbow"])
+	scene, err = mode.New(gctx, num, g.Palettes["rainbow"])
 	return err
 }
 
