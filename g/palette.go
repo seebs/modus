@@ -87,24 +87,28 @@ func (p *Palette) Interpolate(n int) *Palette {
 	return np
 }
 
+func (p Palette) coerced(idx int) int {
+	return ((idx % p.Length) + p.Length) % p.Length
+}
+
 // Paint yields the idx'th Paint in a given Palette, coercing into range.
 func (p Palette) Paint(idx int) Paint {
-	return Paint(idx % p.Length)
+	return Paint(p.coerced(idx))
 }
 
 // Color yields the corresponding ebiten.ColorM, coercing into range.
 func (p Palette) ColorM(pt Paint) ebiten.ColorM {
-	return p.ColorMs[int(pt)%p.Length]
+	return p.ColorMs[p.coerced(int(pt))]
 }
 
 // Float32 yields RGBA float32 values
 func (p Palette) Float32(pt Paint) (float32, float32, float32, float32) {
-	f := p.F32[int(pt)%p.Length]
+	f := p.F32[p.coerced(int(pt))]
 	return f[0], f[1], f[2], 1.0
 }
 
 // Inc yields the nth Paint after the given Paint. n may be negative,
 // but not negative and greater in magnitude than the length of the palette.
 func (p Palette) Inc(pt Paint, n int) Paint {
-	return Paint((int(pt) + n) % p.Length)
+	return Paint(p.coerced(int(pt) + n))
 }
