@@ -19,7 +19,7 @@ type dotGridMode struct {
 const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
-	{name: "boring", depth: 5, cycleTime: dotGridCycleTime, compute: boringCompute},
+	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
 }
 
 // type DotCompute func(base [][]DotGridBase, prev [][]DotGridState, next [][]DotGridState)
@@ -31,9 +31,9 @@ func boringCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridSt
 			x0, y0 := b.X, b.Y
 			p := s.palette.Paint(int(x0*20 + y0*30 + s.t0))
 			t := (y0*float32(s.gr.H)*float32(s.gr.W) + x0*float32(s.gr.W)) + (s.pcycle * math.Pi * 2)
-			x := s.pinv*x0 + s.pulse*(1+math.Sin(t))/2
-			y := s.pinv*y0 + s.pulse*(1+math.Cos(t))/2
-			scale := math.Abs(x0-0.5) + math.Abs(y0-0.5)
+			x := s.pinv*x0 + s.pulse*math.Sin(t)
+			y := s.pinv*y0 + s.pulse*math.Cos(t)
+			scale := math.Abs(x0/2) + math.Abs(y0/2)
 			scale = scale + s.pulse
 			if scale > 1 {
 				scale = 2 - scale
