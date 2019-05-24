@@ -44,6 +44,12 @@ func (c *Context) NewHexGrid(w int, r RenderType, p *Palette) *HexGrid {
 	return newHexGrid(w, r, p, c.w, c.h)
 }
 
+// NewDotGrid returns a grid of dots with width "w" across its wider
+// dimension.
+func (c *Context) NewDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette) *DotGrid {
+	return newDotGrid(w, thickness, depth, r, p, c.w, c.h)
+}
+
 // NewSpiral returns a spiral for the given Context.
 func (c *Context) NewSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int) *Spiral {
 	return newSpiral(depth, r, points, p, cycles, offset)

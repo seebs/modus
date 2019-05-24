@@ -6,7 +6,7 @@ import (
 	"seebs.net/modus/sound"
 )
 
-// knightMode is one of the internal modes based on knight moves
+// hexPaintMode is one of the internal modes based on painting hexes
 type hexPaintMode struct {
 	cycleTime int // number of ticks to go by between updates
 }

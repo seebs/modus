@@ -128,6 +128,7 @@ var (
 	squareTexture         *ebiten.Image
 	hexTexture            *ebiten.Image
 	solidTexture          *ebiten.Image
+	dotTexture            *ebiten.Image
 )
 
 func hexTextureWidth(cols int) int {
@@ -321,6 +322,29 @@ func createTextures() {
 		log.Fatalf("couldn't create image: %s", err)
 	}
 	solidTexture.Fill(color.RGBA{255, 255, 255, 255})
+
+	img = image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 16, Y: 16}})
+	// fill in the insides, roughly:
+	centerPoint := float32(7.5)
+	for i := 1; i < 15; i++ {
+		for j := 1; j < 15; j++ {
+			dx, dy := float32(i)-centerPoint, float32(j)-centerPoint
+			grey := 1 - (((dx * dx) + (dy * dy)) / 64)
+			if grey < 0 {
+				grey = 0
+			}
+			if grey > 1 {
+				grey = 1
+			}
+			v := uint8(grey * 256)
+			col := color.RGBA{v, v, v, v}
+			img.Set(i, j, col)
+		}
+	}
+	dotTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
+	if err != nil {
+		log.Fatalf("couldn't create image: %s", err)
+	}
 }
 
 // CreateHexTextures will actually create hex textures. It must be called when
