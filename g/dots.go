@@ -98,7 +98,7 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	w, h, scale = makeDotGridHeight(w, sx, sy)
 	// thickness was originally calculated by reference to width=20 on a 1280px screen, so...
 	// 1280px/20 width => 64px spacing
-	thickness *= float32(sx) / float32(w) / 64
+	thickness *= float32(sx) / float32(w) / 32
 	if thickness < 2 {
 		thickness = 2
 	}
