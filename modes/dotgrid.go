@@ -11,7 +11,7 @@ import (
 // knightMode is one of the internal modes based on knight moves
 type dotGridMode struct {
 	cycleTime int // number of ticks to go by between updates
-	compute   func(*dotGridScene, [][]g.DotGridBase, [][]g.DotGridState, [][]g.DotGridState)
+	compute   func(*dotGridScene, [][]g.DotGridBase, [][]g.DotGridState, [][]g.DotGridState) string
 	name      string
 	depth     int
 }
@@ -19,33 +19,90 @@ type dotGridMode struct {
 const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
+	{name: "distance", depth: 8, cycleTime: dotGridCycleTime, compute: distanceCompute},
 	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
 }
 
-// type DotCompute func(base [][]DotGridBase, prev [][]DotGridState, next [][]DotGridState)
+// type DotCompute func(base [][]DotGridBase, prev [][]DotGridState, next [][]DotGridState) string
 
-func boringCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) {
+func boringCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) string {
+	pulse := s.pulse
+	pinv := s.pinv
+	if pulse > 0.95 {
+		pulse = 0.95
+		pinv = 1 - pulse
+	}
+	if pulse < 0.05 {
+		pulse = 0.05
+		pinv = 1 - pulse
+	}
 	for i := range base {
 		for j := range base[i] {
 			b := &base[i][j]
 			old := &prev[i][j]
 			x0, y0 := b.X, b.Y
 			t := (y0*float32(s.gr.H)*float32(s.gr.W) + x0*float32(s.gr.W)) + (s.pcycle * math.Pi * 2)
-			x := s.pinv*x0 + s.pulse*math.Sin(t)
-			y := s.pinv*y0 + s.pulse*math.Cos(t)
+			x := pinv*x0 + pulse*math.Sin(t)
+			y := pinv*y0 + pulse*math.Cos(t)
 			dx, dy := x-old.X, y-old.Y
-			p := s.palette.Paint(int(math.Sqrt(dx*dx+dy*dy) * 1200))
-			scale := math.Abs(x0/2) + math.Abs(y0/2)
-			scale = scale + s.pulse
+			p := s.palette.Paint(int(math.Sqrt(dx*dx+dy*dy)*1800 + s.t0/16))
+			scale := math.Abs(x0) + math.Abs(y0) + (s.t0 / 64)
+			scale = math.Mod(scale, 2)
 			if scale > 1 {
 				scale = 2 - scale
 			}
 			if scale < 0.2 {
 				scale = 0.2
 			}
-			next[i][j] = g.DotGridState{X: x, Y: y, P: p, A: 1, S: scale}
+			next[i][j] = g.DotGridState{X: x, Y: y, P: p, A: 0.7, S: scale}
 		}
 	}
+	return ""
+	// return fmt.Sprintf("t0: %.1f pulse: %.2f pinv: %.2f", s.t0, s.pulse, s.pinv)
+}
+
+func distanceCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) string {
+	pulse := s.pulse
+	pinv := s.pinv
+	if pulse > 0.95 {
+		pulse = 0.95
+		pinv = 1 - pulse
+	}
+	if pulse < 0.05 {
+		pulse = 0.05
+		pinv = 1 - pulse
+	}
+	_ = pinv
+	for i := range base {
+		for j := range base[i] {
+			b := &base[i][j]
+			old := &prev[i][j]
+			x0, y0 := b.X, b.Y
+			distance := math.Sqrt(x0*x0 + y0*y0)
+			var t float32
+			if distance >= 1 {
+				t = distance*(s.pulse/2) - (s.t0 / 300)
+			} else {
+				t = (math.Abs(distance-0.5) * 2 * (s.pulse * 2)) + (s.t0 / 192)
+			}
+			sin, cos := math.Sincos(t)
+			x := cos*x0 + sin*y0
+			y := cos*y0 - sin*x0
+			dx, dy := x-old.X, y-old.Y
+			p := s.palette.Paint(int(math.Sqrt(dx*dx+dy*dy)*1800 + (s.t0 / 100) + (distance * 30)))
+			scale := math.Abs(x0) + math.Abs(y0) + (s.t0 / 64)
+			scale = math.Mod(scale, 2)
+			if scale > 1 {
+				scale = 2 - scale
+			}
+			if scale < 0.2 {
+				scale = 0.2
+			}
+			next[i][j] = g.DotGridState{X: x, Y: y, P: p, A: 0.7, S: scale}
+		}
+	}
+	return ""
+	// return fmt.Sprintf("t0: %.1f pulse: %.2f pinv: %.2f", s.t0, s.pulse, s.pinv)
 }
 
 func init() {
@@ -95,7 +152,7 @@ func (s *dotGridScene) Mode() Mode {
 
 func (s *dotGridScene) Reset(detail int, p *g.Palette) error {
 	_ = s.Hide()
-	s.palette = p.Interpolate(20)
+	s.palette = p.Interpolate(12)
 	err := s.Display()
 	if err != nil {
 		return err
@@ -105,9 +162,9 @@ func (s *dotGridScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *dotGridScene) Display() error {
-	s.gr = s.gctx.NewDotGrid(s.detail, 8, s.mode.depth, 1, s.palette)
-	s.gr.Compute = func(base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) {
-		s.mode.compute(s, base, prev, next)
+	s.gr = s.gctx.NewDotGrid(s.detail*4, 8, s.mode.depth, 1, s.palette)
+	s.gr.Compute = func(base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) string {
+		return s.mode.compute(s, base, prev, next)
 	}
 	return nil
 }
