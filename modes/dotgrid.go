@@ -28,11 +28,13 @@ func boringCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridSt
 	for i := range base {
 		for j := range base[i] {
 			b := &base[i][j]
+			old := &prev[i][j]
 			x0, y0 := b.X, b.Y
-			p := s.palette.Paint(int(x0*20 + y0*30 + s.t0))
 			t := (y0*float32(s.gr.H)*float32(s.gr.W) + x0*float32(s.gr.W)) + (s.pcycle * math.Pi * 2)
 			x := s.pinv*x0 + s.pulse*math.Sin(t)
 			y := s.pinv*y0 + s.pulse*math.Cos(t)
+			dx, dy := x-old.X, y-old.Y
+			p := s.palette.Paint(int(math.Sqrt(dx*dx+dy*dy) * 1200))
 			scale := math.Abs(x0/2) + math.Abs(y0/2)
 			scale = scale + s.pulse
 			if scale > 1 {
@@ -122,7 +124,7 @@ func (s *dotGridScene) Tick(voice *sound.Voice) (bool, error) {
 	}
 	s.t0++
 	s.pcycleCt++
-	if s.pcycleCt > 128 {
+	if s.pcycleCt >= 128 {
 		s.pcycleCt = 0
 	}
 	s.pcycle = float32(s.pcycleCt) / 128

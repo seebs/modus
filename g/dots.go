@@ -18,6 +18,8 @@ type DotGrid struct {
 	depth         int
 	W, H          int
 	baseDots      [][]DotGridBase
+	baseOffset    float32
+	coordOffset   float32
 	states        [][][]DotGridState
 	Compute       DotCompute
 	vertices      []ebiten.Vertex
@@ -114,18 +116,21 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	// the indices don't change
 	quads := dg.W * dg.H
 	dg.vertices = make([]ebiten.Vertex, depth*4*quads)
-	fmt.Printf("vertices: %p (quads %d)\n", &dg.vertices[0], quads)
 	dg.depthVertices = make([][]ebiten.Vertex, dg.depth)
 	dg.indices = make([]uint16, 0, 6*quads)
 	dg.states = make([][][]DotGridState, dg.depth)
 	dg.baseDots = make([][]DotGridBase, dg.W)
 	dg.depthDirty = make([]bool, dg.depth)
+	dg.baseOffset = float32(dg.W-dg.H) / 2
+	dg.coordOffset = float32(dg.baseOffset) / float32(dg.H)
+	fmt.Printf("baseoffset %.1f (%dx%d) => %.2f\n", dg.baseOffset, dg.W, dg.H, dg.coordOffset)
 
 	offset := uint16(0)
 	for i := range dg.baseDots {
 		dots := make([]DotGridBase, dg.H)
 		dg.baseDots[i] = dots
-		x0 := ((float32(i) / float32(dg.W-1)) - 0.5) * 2
+		x0 := (((float32(i) - dg.baseOffset) / float32(dg.H-1)) - 0.5) * 2
+		fmt.Printf("%d: %.2f\n", i, x0)
 		for j := range dg.baseDots[i] {
 			y0 := ((float32(j) / float32(dg.H-1)) - 0.5) * 2
 			dots[j].X, dots[j].Y = x0, y0
@@ -189,7 +194,7 @@ func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex) {
 			vs := dvs[offset : offset+4]
 			// scale is a multiplier on the base thickness/size of
 			// dots
-			x, y := (s.X/2+0.5)*dg.sx, (s.Y/2+0.5)*dg.sy
+			x, y := (s.X/2+0.5+dg.coordOffset)*dg.sy, (s.Y/2+0.5)*dg.sy
 			scale := dg.Thickness * s.S
 			vs[0].DstX, vs[0].DstY = x-scale, y-scale
 			vs[1].DstX, vs[1].DstY = x+scale, y-scale
