@@ -1,6 +1,7 @@
 package g
 
 import (
+	"fmt"
 	"math/rand"
 
 	math "github.com/chewxy/math32"
@@ -125,39 +126,49 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 	textureSetup()
 
 	gr := &HexGrid{render: r, Width: w, palette: p}
-	hexWidth := math.Floor(float32(sx) / (float32(w) + 0.5))
-	// make it an even number, so the half-hex offset rows don't
-	// look funny
-	if int(hexWidth)&1 == 1 {
-		hexWidth--
-	}
+	var hexWidth float32
+	var hexHeight float32
+	var vHexes float32
 
-	// the full height of a hex is 2/sqrt(3) times the width, but
-	// each additional row costs only 3/4 that much.
-	hexHeight := math.Floor(2 / math.Sqrt(3) * hexWidth)
-	// the first row costs a full hexHeight. Every row after it costs
-	// 3/4 of that. So:
-	// h = (3n+1) * x/4
-	// 4h/x = 3n + 1
-	// (4h/x - 1) = 3n
-	// (4h/x - 1)/3 = n
-	vHexes := math.Floor((float32(sy)*4/hexHeight - 1) / 3)
+	for {
+		hexWidth = math.Floor(float32(sx) / (float32(gr.Width) + 0.5))
+		// make it an even number, so the half-hex offset rows don't
+		// look funny
+		if int(hexWidth)&1 == 1 {
+			hexWidth--
+		}
+		// the full height of a hex is 2/sqrt(3) times the width, but
+		// each additional row costs only 3/4 that much.
+		hexHeight = math.Floor(2 / math.Sqrt(3) * hexWidth)
+		// the first row costs a full hexHeight. Every row after it costs
+		// 3/4 of that. So:
+		// h = (3n+1) * x/4
+		// 4h/x = 3n + 1
+		// (4h/x - 1) = 3n
+		// (4h/x - 1)/3 = n
+		vHexes = math.Floor((float32(sy)*4/hexHeight - 1) / 3)
+		if gr.Width*int(vHexes)*3 < ebiten.MaxIndicesNum {
+			break
+		}
+		gr.Width--
+	}
 
 	gr.hexWidth = float32(hexWidth)
 	gr.hexHeight = float32(hexHeight)
 	gr.perHexHeight = 3 * hexHeight / 4
-	totalHeight := float32((3*vHexes + 1) * hexHeight / 4)
-	totalWidth := float32(hexWidth * (float32(w) + 0.5))
+	totalHeight := (3*vHexes + 1) * hexHeight / 4
+	totalWidth := hexWidth * (float32(gr.Width) + 0.5)
 	gr.ox, gr.oy = (float32(sx)-totalWidth)/2, (float32(sy)-totalHeight)/2
 	gr.Height = int(vHexes)
+	fmt.Printf("%dx%d => %d [*3]\n", gr.Width, gr.Height, gr.Width*gr.Height)
 
-	// fmt.Printf("sx %d, w %d, hexWidth %.1f\n", sx, w, hexWidth)
+	// fmt.Printf("sx %d, w %d, hexWidth %.1f\n", sx, gr.Width, hexWidth)
 	// fmt.Printf("hexHeight %.1f, sy %d, vHexes %f, total %f\n", hexHeight, sy, vHexes, totalHeight)
 	// fmt.Printf("ox %.1f, oy %.1f\n", gr.ox, gr.oy)
 
 	gr.Cells = make([][]Cell, gr.Width)
 	gr.vertices = make([]ebiten.Vertex, 0, 3*gr.Width*gr.Height)
-	gr.indices = make([]uint16, 3*gr.Width*gr.Width)
+	gr.indices = make([]uint16, 0, 3*gr.Width*gr.Height)
 	for col := range gr.Cells {
 		r := make([]Cell, gr.Height)
 		for row := range r {
@@ -168,6 +179,7 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 		}
 		gr.Cells[col] = r
 	}
+	fmt.Printf("indices: %d\n", len(gr.indices))
 	return gr
 }
 
