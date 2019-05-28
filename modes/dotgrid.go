@@ -15,6 +15,7 @@ type dotGridMode struct {
 	cycleTime   int // number of ticks to go by between updates
 	compute     func(*dotGridScene, [][]g.DotGridBase, [][]g.DotGridState, [][]g.DotGridState) string
 	computeInit func(*dotGridScene, [][]g.DotGridBase, [][]g.DotGridState)
+	detail      func(int) int
 	name        string
 	depth       int
 }
@@ -22,9 +23,16 @@ type dotGridMode struct {
 const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
-	{name: "gravity", depth: 8, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit},
+	{name: "gravity", depth: 8, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit, detail: gravityDetail},
 	{name: "distance", depth: 8, cycleTime: dotGridCycleTime, compute: distanceCompute},
 	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
+}
+
+func (m *dotGridMode) Detail(base int) int {
+	if m != nil && m.detail != nil {
+		return m.detail(base)
+	}
+	return base * 4
 }
 
 // type DotCompute func(base [][]DotGridBase, prev [][]DotGridState, next [][]DotGridState) string
@@ -39,8 +47,18 @@ func reallyBoringCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.Dot
 	return ""
 }
 
+// gravity has to be cautious
+func gravityDetail(base int) int {
+	out := base * 2
+	if out > 44 {
+		out = 44
+	}
+	return out
+}
+
 // let's do... gravity!
 func gravityCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) string {
+	cshift := s.t0 / 256
 	factor := float32(len(base) * len(base[0]))
 	computed := 0
 	t := (s.t0 / 60)
@@ -64,8 +82,8 @@ func gravityCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridS
 						if gscale < 0.01 {
 							gscale = 0.01
 						}
-						gscale += s.pulse + 0.1
-						gscale *= factor * 4000
+						gscale += 0.1 + s.pulse
+						gscale *= factor * 5000
 						dx, dy = dx/gscale, dy/gscale
 						base[i][j].DX += dx
 						base[i][j].DY += dy
@@ -82,20 +100,28 @@ func gravityCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGridS
 			}
 			dx, dy := prev[i][j].X-cx, prev[i][j].Y-cy
 			dist := math.Sqrt(dx*dx + dy*dy)
+			speed := math.Sqrt(base[i][j].DX*base[i][j].DX + base[i][j].DY*base[i][j].DY)
+			// same sign == product > 0
+			if dx*base[i][j].DX > 0 && dy*base[i][j].DY > 0 {
+				base[i][j].DX -= dx / 10000
+			}
 			if dist > 0.1 {
 				// damping factor: push towards center of screen
 				base[i][j].DX -= dx / 10000
 				base[i][j].DY -= dy / 10000
 			}
-			speed := math.Sqrt(base[i][j].DX*base[i][j].DX + base[i][j].DY*base[i][j].DY)
+			if speed >= 0.05 {
+				base[i][j].DX *= .95
+				base[i][j].DY *= .95
+			}
 			sinv := 1 - (speed * 30)
 			if sinv < 0.05 {
 				sinv = 0.05
 			}
 			if (i+j)&1 == 1 {
-				next[i][j].P = g.Paint(int(speed*900) - 10)
+				next[i][j].P = g.Paint(int(speed*900+cshift) - 10)
 			} else {
-				next[i][j].P = g.Paint(int(speed*900) + 36)
+				next[i][j].P = g.Paint(int(speed*900+cshift) + 36)
 			}
 			next[i][j].A = 1
 			next[i][j].S = sinv
@@ -264,7 +290,7 @@ func (s *dotGridScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *dotGridScene) Display() error {
-	s.gr = s.gctx.NewDotGrid(s.detail*4, 8, s.mode.depth, 1, s.palette)
+	s.gr = s.gctx.NewDotGrid(s.mode.Detail(s.detail), 8, s.mode.depth, 1, s.palette)
 	s.gr.Compute = func(base [][]g.DotGridBase, prev [][]g.DotGridState, next [][]g.DotGridState) string {
 		return s.mode.compute(s, base, prev, next)
 	}
