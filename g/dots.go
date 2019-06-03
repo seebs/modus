@@ -176,10 +176,7 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 			dg.states[d][i] = make([]DotGridState, dg.Major)
 			for j := 0; j < dg.Major; j++ {
 				vs := dg.vertices[vOffset : vOffset+4]
-				vs[0].SrcX, vs[0].SrcY = 1, 1
-				vs[1].SrcX, vs[1].SrcY = 15, 1
-				vs[2].SrcX, vs[2].SrcY = 1, 15
-				vs[3].SrcX, vs[3].SrcY = 15, 15
+				copy(vs, dotData.vsByR[1])
 				vOffset += 4
 			}
 		}
@@ -198,7 +195,7 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 		}
 		opt.ColorM.Reset()
 		opt.ColorM.Scale(1.0, 1.0, 1.0, float64(dg.alphaDecays[d]))
-		target.DrawTriangles(dg.depthVertices[d], dg.indices, dotTexture, &opt)
+		target.DrawTriangles(dg.depthVertices[d], dg.indices, dotData.img, &opt)
 	}
 	ebitenutil.DebugPrint(target, dg.status)
 }

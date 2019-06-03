@@ -174,7 +174,7 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 		for row := range r {
 			r[row] = Cell{Alpha: 1, Scale: .95}
 			offset := uint16(len(gr.vertices))
-			gr.vertices = append(gr.vertices, hexVerticesByDepth[gr.render]...)
+			gr.vertices = append(gr.vertices, hexData.vsByR[gr.render]...)
 			gr.indices = append(gr.indices, offset+0, offset+1, offset+2)
 		}
 		gr.Cells[col] = r
@@ -284,7 +284,7 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 			offset += 3
 		}
 	}
-	target.DrawTriangles(gr.vertices, gr.indices, hexTexture, op)
+	target.DrawTriangles(gr.vertices, gr.indices, hexData.img, op)
 }
 
 // Iterate runs fn on the entire grid.

@@ -151,7 +151,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*6 {
-		fv := triVerticesByDepth[pl.render]
+		fv := lineData.vsByR[pl.render]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*6)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv...)
@@ -301,7 +301,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 	}
 	// populate with the SrcX, SrcY values.
 	if len(pl.vertices) < segments*4 {
-		fv := triVerticesByDepth[pl.render]
+		fv := lineData.vsByR[pl.render]
 		pl.vertices = make([]ebiten.Vertex, 0, segments*4)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv[0:4]...)
@@ -403,7 +403,7 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha float32, scale float32) {
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices, pl.indices, lineTexture, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+	target.DrawTriangles(pl.vertices, pl.indices, lineData.img, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
 	if pl.debug != nil {
 		pl.debug.Draw(target, alpha, scale)
 	}

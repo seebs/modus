@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	screenWidth  = 1440
-	screenHeight = 1440
+	screenWidth  = 1280
+	screenHeight = 960
 )
 
 var (
@@ -83,6 +83,7 @@ func (km keyMap) Update() {
 var keys = keyMap{
 	ebiten.KeyQ:     0,
 	ebiten.KeySpace: 0,
+	ebiten.KeyLeft:  0,
 	ebiten.KeyRight: 0,
 	ebiten.KeyUp:    0,
 }

@@ -76,7 +76,7 @@ func newSquareGrid(w int, r RenderType, p *Palette, sx, sy int) *SquareGrid {
 		scale:   scale,
 		ox:      (sx - int(scale)*w) / 2,
 		oy:      (sy - int(scale)*h) / 2,
-		base:    squareVerticesByDepth[r],
+		base:    squareData.vsByR[r],
 	}
 	gr.Cells = make([][]Cell, gr.Width)
 	for idx := range gr.Cells {
@@ -101,8 +101,8 @@ func newSquareGrid(w int, r RenderType, p *Palette, sx, sy int) *SquareGrid {
 		//
 		// 0->1->2, 2->1->3
 		// baseVertices currently live in lines.go, but it's the same here.
-		// fmt.Printf("sqVBD[%d]: len %d\n", gr.Depth, len(squareVerticesByDepth))
-		gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.render]...)
+		// fmt.Printf("sqVBD[%d]: len %d\n", gr.Depth, len(squareData.vsByR))
+		gr.vertices = append(gr.vertices, squareData.vsByR[gr.render]...)
 		gr.indices = append(gr.indices,
 			offset+0, offset+1, offset+2,
 			offset+2, offset+1, offset+3)
@@ -142,7 +142,7 @@ func (gr *SquareGrid) NewExtraCell() FloatingCell {
 	gr.ExtraCells = append(gr.ExtraCells, c)
 	// add vertex storage for extra cell
 	offset := uint16(len(gr.vertices))
-	gr.vertices = append(gr.vertices, squareVerticesByDepth[gr.render]...)
+	gr.vertices = append(gr.vertices, squareData.vsByR[gr.render]...)
 	gr.indices = append(gr.indices,
 		offset+0, offset+1, offset+2,
 		offset+2, offset+1, offset+3)
@@ -254,9 +254,9 @@ func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 	// draw extra cells
 	for _, c := range gr.ExtraCells {
 		vs := gr.vertices[offset : offset+4]
-		copy(vs, squareVerticesByDepth[c.Cell.R])
+		copy(vs, squareData.vsByR[c.Cell.R])
 		gr.drawCell(vs, &c.Cell, *c.Loc(), xscale, yscale)
 		offset += 4
 	}
-	target.DrawTriangles(gr.vertices, gr.indices, squareTexture, op)
+	target.DrawTriangles(gr.vertices, gr.indices, squareData.img, op)
 }

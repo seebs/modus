@@ -3,20 +3,20 @@ package g
 import (
 	"image"
 	"log"
-	"math"
 	"sync"
 
 	"image/color"
 
+	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
 )
 
 // Here, we create textures for other parts of g to use.
 
-// hexDepth represents one of the rings of a hex, which are
+// hexRender represents one of the rings of a hex, which are
 // drawn as opaque values out-to-in, allowing us to make rings.
 // radius ranges from 0 to 1, value from 0 to 255.
-type hexDepth struct {
+type hexRender struct {
 	radius float32
 	value  uint8
 }
@@ -38,8 +38,9 @@ var (
 		{85, 85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85, 85},
 		{63, 63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63, 63},
 	}
-	// squares store a series of rings around the central point.
-	squareDepths = [4][32]byte{
+	// squareRenders defines the brightness/intensity of rings around the central point
+	// of a square.
+	squareRenders = [4][32]byte{
 		// white
 		{
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -66,22 +67,51 @@ var (
 		{SrcX: 0, SrcY: 0.5, ColorA: 1.0}, // prev
 		{SrcX: 1, SrcY: 0.5, ColorA: 1.0}, // next
 	}
-	hexDepths = [][]hexDepth{
-		[]hexDepth{
+	dotRenders = []func(x, y float32) uint8{
+		func(x, y float32) uint8 {
+			dx, dy := x, y
+			grey := 1 - math.Sqrt((dx*dx)+(dy*dy))
+			if grey < 0 {
+				grey = 0
+			}
+			if grey > 1 {
+				grey = 1
+			}
+			return uint8(grey * 255)
+		},
+		func(x, y float32) uint8 {
+			dx, dy := math.Abs(x), math.Abs(y)
+			dx2, dy2 := dx*dx, dy*dy
+			m := dx
+			if dy < m {
+				m = dy
+			}
+			grey := 1 - math.Sqrt(dx2+dy2) - (m / .3)
+			if grey < 0 {
+				grey = 0
+			}
+			if grey > 1 {
+				grey = 1
+			}
+			return uint8(grey * 255)
+		},
+	}
+	hexRenders = [][]hexRender{
+		[]hexRender{
 			{radius: 1, value: 255},
 		},
-		[]hexDepth{
+		[]hexRender{
 			{radius: 1, value: 192},
 			{radius: 0.875, value: 220},
 		},
-		[]hexDepth{
+		[]hexRender{
 			{radius: 1, value: 192},
 			{radius: 0.875, value: 220},
 			{radius: 0.75, value: 192},
 			{radius: 0.625, value: 128},
 			{radius: 0.5, value: 64},
 		},
-		[]hexDepth{
+		[]hexRender{
 			{radius: 1, value: 64},
 			{radius: 0.875, value: 96},
 			{radius: 0.75, value: 128},
@@ -90,11 +120,11 @@ var (
 			{radius: 0.375, value: 224},
 			{radius: 0.25, value: 225},
 		},
-		[]hexDepth{
+		[]hexRender{
 			{radius: 1, value: 192},
 			{radius: 0.875, value: 220},
 		},
-		[]hexDepth{
+		[]hexRender{
 			{radius: 1, value: 220},
 			{radius: 0.875, value: 192},
 			{radius: 0.75, value: 128},
@@ -121,15 +151,20 @@ var (
 	hexHeight        = int(math.Sqrt(3) / 2 * hexRadius)
 	hexRows, hexCols int
 
-	triVerticesByDepth    [][]ebiten.Vertex
-	squareVerticesByDepth [][]ebiten.Vertex
-	hexVerticesByDepth    [][]ebiten.Vertex
-	lineTexture           *ebiten.Image
-	squareTexture         *ebiten.Image
-	hexTexture            *ebiten.Image
-	solidTexture          *ebiten.Image
-	dotTexture            *ebiten.Image
+	squareData *textureWithVertices
+	hexData    *textureWithVertices
+	lineData   *textureWithVertices
+	dotData    *textureWithVertices
+	solidData  *textureWithVertices
 )
+
+// textureWithVertices holds an image representing multiple render types,
+// and corresponding vertex values by render type. types == len(vsByR).
+type textureWithVertices struct {
+	types int
+	img   *ebiten.Image
+	vsByR [][]ebiten.Vertex
+}
 
 func hexTextureWidth(cols int) int {
 	if cols == 0 {
@@ -138,7 +173,7 @@ func hexTextureWidth(cols int) int {
 	if cols < 0 {
 		cols *= -1
 	}
-	return int(math.Ceil(3+1.5*(float64(cols)-1))*hexRadius) + 2*(cols+1)
+	return int(math.Ceil(3+1.5*(float32(cols)-1))*hexRadius) + 2*(cols+1)
 }
 
 func hexTextureXOffset(col int) int {
@@ -156,43 +191,15 @@ func hexTextureHeight(rows int) int {
 	if rows < 0 {
 		rows *= -1
 	}
-	return int(math.Ceil(float64(hexHeightScale)*4+(float64(hexHeightScale)*3)*(float64(rows)-1))*hexRadius) + 2*(rows+1)
+	return int(math.Ceil(float32(hexHeightScale)*4+(float32(hexHeightScale)*3)*(float32(rows)-1))*hexRadius) + 2*(rows+1)
 }
 
-func createTextures() {
-	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
-	for depth := 0; depth < 4; depth++ {
-		offsetX := (depth%2)*32 + 2
-		offsetY := (depth/2)*32 + 2
-		offsetXf := float32(offsetX)
-		offsetYf := float32(offsetY)
-		scalef := float32(28)
-		for r := 0; r < 32; r++ {
-			v := lineDepths[depth][r/2]
-			col := color.RGBA{v, v, v, v}
-			for c := 0; c < 14; c++ {
-				img.Set(offsetX+c*2, offsetY+r-1, col)
-				img.Set(offsetX+c*2+1, offsetY+r-1, col)
-			}
-		}
-		triVertices := make([]ebiten.Vertex, 6)
-		for i := 0; i < 6; i++ {
-			triVertices[i] = baseVertices[i]
-			// pull X in from the ends, so it doesn't dim at the ends.
-			triVertices[i].SrcX = offsetXf + 2 + triVertices[i].SrcX*(scalef-4)
-			triVertices[i].SrcY = offsetYf + triVertices[i].SrcY*scalef
-		}
-		triVerticesByDepth = append(triVerticesByDepth, triVertices)
-	}
-	var err error
-	lineTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
-	if err != nil {
-		log.Fatalf("couldn't create image: %s", err)
-	}
-	img = image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 128, Y: 128}})
-	for depth := 0; depth < 4; depth++ {
-		offsetX := (depth % 2) * 64
-		offsetY := (depth / 2) * 64
+func createSquareTextures() (*textureWithVertices, error) {
+	twv := &textureWithVertices{}
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 128, Y: 128}})
+	for render := 0; render < 4; render++ {
+		offsetX := (render % 2) * 64
+		offsetY := (render / 2) * 64
 		offsetXf := float32(offsetX)
 		offsetYf := float32(offsetY)
 		scalef := float32(60)
@@ -200,7 +207,7 @@ func createTextures() {
 		for r := 0; r < 32; r++ {
 			// zero value is transparent black
 			var col color.RGBA
-			v := squareDepths[depth][r]
+			v := squareRenders[render][r]
 			if v != 0 {
 				// leave 0 values transparent
 				col = color.RGBA{v, v, v, 255}
@@ -222,12 +229,77 @@ func createTextures() {
 			squareVertices[i].SrcX = offsetXf + 2 + squareVertices[i].SrcX*scalef
 			squareVertices[i].SrcY = offsetYf + 2 + squareVertices[i].SrcY*scalef
 		}
-		squareVerticesByDepth = append(squareVerticesByDepth, squareVertices)
+		twv.vsByR = append(twv.vsByR, squareVertices)
 	}
-	squareTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
+	twv.types = len(twv.vsByR)
+	var err error
+	twv.img, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
 	if err != nil {
-		log.Fatalf("couldn't create image: %s", err)
+		return nil, err
 	}
+	return twv, nil
+}
+
+func createLineTextures() (*textureWithVertices, error) {
+	twv := &textureWithVertices{}
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
+	for depth := 0; depth < 4; depth++ {
+		offsetX := (depth%2)*32 + 2
+		offsetY := (depth/2)*32 + 2
+		offsetXf := float32(offsetX)
+		offsetYf := float32(offsetY)
+		scalef := float32(28)
+		for r := 0; r < 32; r++ {
+			v := lineDepths[depth][r/2]
+			col := color.RGBA{v, v, v, v}
+			for c := 0; c < 14; c++ {
+				img.Set(offsetX+c*2, offsetY+r-1, col)
+				img.Set(offsetX+c*2+1, offsetY+r-1, col)
+			}
+		}
+		lineVertices := make([]ebiten.Vertex, 6)
+		for i := 0; i < 6; i++ {
+			lineVertices[i] = baseVertices[i]
+			// pull X in from the ends, so it doesn't dim at the ends.
+			lineVertices[i].SrcX = offsetXf + 2 + lineVertices[i].SrcX*(scalef-4)
+			lineVertices[i].SrcY = offsetYf + lineVertices[i].SrcY*scalef
+		}
+		twv.vsByR = append(twv.vsByR, lineVertices)
+	}
+	var err error
+	twv.img, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
+	if err != nil {
+		return nil, err
+	}
+	return twv, err
+}
+
+func createTextures() {
+	var err error
+	squareData, err = createSquareTextures()
+	if err != nil {
+		log.Fatalf("couldn't make square textures: %v", err)
+	}
+	lineData, err = createLineTextures()
+	if err != nil {
+		log.Fatalf("couldn't make line textures: %v", err)
+	}
+	hexData, err = createHexTextures()
+	if err != nil {
+		log.Fatalf("couldn't make hex textures: %v", err)
+	}
+	dotData, err = createDotTextures()
+	if err != nil {
+		log.Fatalf("couldn't make dot textures: %v", err)
+	}
+	solidData, err = createSolidTexture()
+	if err != nil {
+		log.Fatalf("couldn't make solid texture: %v", err)
+	}
+}
+
+func createHexTextures() (*textureWithVertices, error) {
+	twv := &textureWithVertices{}
 	// hexes alternate between triangle-up and triangle-down. given a hex of
 	// radius 1, the leftmost/rightmost point of its triangle will be 1.5
 	// from its center, the flat side of its triangle will be (sqrt(3)/2)
@@ -243,19 +315,18 @@ func createTextures() {
 	// so, we start with a 2sqrt3 height, 4.5 width, for two hexes. each
 	// additional hex adds 1.5 width. each additional row adds 1.5sqrt3
 	// height.
-
 	rows := 1
 	cols := 2
-	for n := 2; n < len(hexDepths); n++ {
+	for n := 2; n < len(hexRenders); n++ {
 		// if this already fits, we don't need to do anything
 		if n <= (rows * cols) {
 			continue
 		}
 		// compute area if we add a column:
-		nRows := int(math.Ceil(float64(n) / float64(cols+1)))
+		nRows := int(math.Ceil(float32(n) / float32(cols+1)))
 		aCol := npo2(hexTextureWidth(cols+1)+2) * npo2(hexTextureHeight(nRows)+2)
 		// but what if adding a row is better?
-		nCols := int(math.Ceil(float64(n) / float64(rows+1)))
+		nCols := int(math.Ceil(float32(n) / float32(rows+1)))
 		aRow := npo2(hexTextureWidth(nCols)+2) * npo2(hexTextureHeight(rows+1)+2)
 		// fmt.Printf("n = %d: aRow [%d+2x%d+2]: %d, aCol [%d+2x%d+2]: %d", n, nCols, rows+1, aRow, cols+1, nRows, aCol)
 		if aRow == aCol {
@@ -283,19 +354,20 @@ func createTextures() {
 	// fmt.Printf("total texture size: %d x %d => %d x %d\n", cols, rows, hexW, hexH)
 
 	// create hexTexture now, but it won't actually be populated yet.
-	hexTexture, err = ebiten.NewImage(hexW, hexH, ebiten.FilterLinear)
+	var err error
+	twv.img, err = ebiten.NewImage(hexW, hexH, ebiten.FilterLinear)
 
 	if err != nil {
-		log.Fatalf("couldn't create image: %s", err)
+		return nil, err
 	}
 	// Populate base vertices. actual rendering happens later when the user
 	// calls CreateHexTextures after ebiten is up.
-	hexVerticesByDepth = make([][]ebiten.Vertex, len(hexDepths))
+	twv.vsByR = make([][]ebiten.Vertex, len(hexRenders))
 
-	for depth := 0; depth < len(hexDepths); depth++ {
+	for render := 0; render < len(hexRenders); render++ {
 		var hd [][2]float32
 		vs := make([]ebiten.Vertex, 0, 3)
-		row, col := depth/hexCols, depth%hexCols
+		row, col := render/hexCols, render%hexCols
 		// the top-left point of a down-pointing triangle around the hex
 		ox, oy := hexTextureXOffset(col), hexTextureYOffset(row)
 		if col&1 != 0 {
@@ -313,50 +385,71 @@ func createTextures() {
 
 		}
 		// fmt.Printf("hex depth %d [@%d,%d]: %d, %d\n", depth, col, row, ox, oy)
-		hexVerticesByDepth[depth] = vs
+		twv.vsByR[render] = vs
 		hexDests = append(hexDests, hd)
 	}
+	return twv, nil
+}
 
-	solidTexture, err = ebiten.NewImage(16, 16, ebiten.FilterDefault)
+func createSolidTexture() (*textureWithVertices, error) {
+	img, err := ebiten.NewImage(8, 8, ebiten.FilterDefault)
 	if err != nil {
-		log.Fatalf("couldn't create image: %s", err)
+		return nil, err
 	}
-	solidTexture.Fill(color.RGBA{255, 255, 255, 255})
+	img.Fill(color.RGBA{255, 255, 255, 255})
+	// special case: since it's a solid texture, just use the same point repeatedly.
+	v := ebiten.Vertex{SrcX: 0.5, SrcY: 0.5, ColorR: 1.0, ColorG: 1.0, ColorB: 1.0, ColorA: 1.0}
+	vs := []ebiten.Vertex{v, v, v}
+	twv := &textureWithVertices{img: img, vsByR: [][]ebiten.Vertex{vs}, types: 1}
+	return twv, nil
+}
 
-	img = image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 16, Y: 16}})
-	// fill in the insides, roughly:
-	centerPoint := float32(7.5)
-	for i := 1; i < 15; i++ {
-		for j := 1; j < 15; j++ {
-			dx, dy := float32(i)-centerPoint, float32(j)-centerPoint
-			grey := 1 - (((dx * dx) + (dy * dy)) / 64)
-			if grey < 0 {
-				grey = 0
+func createDotTextures() (*textureWithVertices, error) {
+	twv := &textureWithVertices{}
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
+	scalef := float32(30)
+
+	for render := 0; render < len(dotRenders); render++ {
+		fn := dotRenders[render]
+		offsetX := (render % 2) * 32
+		offsetY := (render / 2) * 32
+		offsetXf := float32(offsetX)
+		offsetYf := float32(offsetY)
+		// fill in the insides, roughly:
+		for i := 1; i < 31; i++ {
+			for j := 1; j < 31; j++ {
+				v := fn(float32(i-16)/15, float32(j-16)/15)
+				col := color.RGBA{v, v, v, v}
+				img.Set(i+offsetX, j+offsetY, col)
 			}
-			if grey > 1 {
-				grey = 1
-			}
-			v := uint8(grey * 256)
-			col := color.RGBA{v, v, v, v}
-			img.Set(i, j, col)
 		}
+		dotVertices := make([]ebiten.Vertex, 4)
+		for i := 0; i < 4; i++ {
+			dotVertices[i] = baseVertices[i]
+			dotVertices[i].SrcX = offsetXf + 2 + dotVertices[i].SrcX*scalef
+			dotVertices[i].SrcY = offsetYf + 2 + dotVertices[i].SrcY*scalef
+		}
+		twv.vsByR = append(twv.vsByR, dotVertices)
 	}
-	dotTexture, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
+	twv.types = len(twv.vsByR)
+	var err error
+	twv.img, err = ebiten.NewImageFromImage(img, ebiten.FilterNearest)
 	if err != nil {
-		log.Fatalf("couldn't create image: %s", err)
+		return nil, err
 	}
+	return twv, nil
 }
 
 // CreateHexTextures will actually create hex textures. It must be called when
 // ebiten is actually running, such as from a hex grid's draw loop.
 func CreateHexTextures() {
-	createHexesOnce.Do(createHexTextures)
+	createHexesOnce.Do(renderHexTextures)
 }
 
-func createHexTextures() {
-	w, h := hexTexture.Size()
+func renderHexTextures() {
+	w, h := hexData.img.Size()
 	hexTex2x, _ := ebiten.NewImage(w*2, h*2, ebiten.FilterLinear)
-	for depth, depths := range hexDepths {
+	for depth, depths := range hexRenders {
 		row, col := depth/hexCols, depth%hexCols
 		// the top-left point of a down-pointing triangle around the hex
 		ox, oy := hexTextureXOffset(col)*2, hexTextureYOffset(row)*2
@@ -370,7 +463,7 @@ func createHexTextures() {
 	}
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(0.5, 0.5)
-	hexTexture.DrawImage(hexTex2x, op)
+	hexData.img.DrawImage(hexTex2x, op)
 	hexTex2x.Dispose()
 }
 
@@ -418,7 +511,7 @@ func drawHexAround(xI, yI int, radius float32, value uint8, target *ebiten.Image
 		ColorG: v,
 		ColorA: 1.0,
 	})
-	target.DrawTriangles(vertices, indices, solidTexture, nil)
+	target.DrawTriangles(vertices, indices, solidData.img, nil)
 }
 
 var (
