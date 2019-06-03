@@ -3,6 +3,7 @@ package modes
 import (
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
+	"seebs.net/modus/keys"
 	"seebs.net/modus/sound"
 )
 
@@ -28,7 +29,7 @@ type Scene interface {
 	Reset(detail int, p *g.Palette) error
 	// Tick updates the mode's internal state, such as moving objects
 	// around the screen.
-	Tick(voice *sound.Voice) (bool, error)
+	Tick(voice *sound.Voice, km keys.Map) (bool, error)
 	// Draw renders the mode's internal state graphically to the provided
 	// screen.
 	Draw(screen *ebiten.Image) error

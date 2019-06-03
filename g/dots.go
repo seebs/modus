@@ -15,6 +15,7 @@ import (
 type DotGrid struct {
 	Palette                    *Palette
 	Thickness                  float32
+	Render                     int
 	depth                      int
 	W, H, Major, Minor         int
 	baseDots                   [][]DotGridBase
@@ -176,7 +177,7 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 			dg.states[d][i] = make([]DotGridState, dg.Major)
 			for j := 0; j < dg.Major; j++ {
 				vs := dg.vertices[vOffset : vOffset+4]
-				copy(vs, dotData.vsByR[1])
+				copy(vs, dotData.vsByR[dg.Render])
 				vOffset += 4
 			}
 		}
@@ -203,6 +204,7 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 // drawVertices computes the actual vertex contents given the state
 func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, scale float32) {
 	offset := 0
+	r := dotData.vsByR[dg.Render]
 	for i := 0; i < dg.Major; i++ {
 		for j := 0; j < dg.Major; j++ {
 			s := &state[i][j]
@@ -215,6 +217,10 @@ func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, sca
 			vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
 			vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale
 			vs[3].DstX, vs[3].DstY = (x+size)*scale, (y+size)*scale
+			vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
+			vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
+			vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
+			vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
 			r, g, b, _ := dg.Palette.Float32(s.P)
 			vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, s.A
 			vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, s.A

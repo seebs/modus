@@ -5,6 +5,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
+	"seebs.net/modus/keys"
 	"seebs.net/modus/sound"
 
 	math "github.com/chewxy/math32"
@@ -23,7 +24,7 @@ type dotGridMode struct {
 const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
-	{name: "gravity", depth: 2, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit, detail: gravityDetail},
+	{name: "gravity", depth: 8, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit, detail: gravityDetail},
 	{name: "distance", depth: 8, cycleTime: dotGridCycleTime, compute: distanceCompute},
 	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
 }
@@ -326,7 +327,7 @@ func (s *dotGridScene) Hide() error {
 	return nil
 }
 
-func (s *dotGridScene) Tick(voice *sound.Voice) (bool, error) {
+func (s *dotGridScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 	s.cycle = (s.cycle + 1) % s.mode.cycleTime
 	if s.cycle != 0 {
 		return false, nil
@@ -339,6 +340,9 @@ func (s *dotGridScene) Tick(voice *sound.Voice) (bool, error) {
 	s.pcycle = float32(s.pcycleCt) / 128
 	s.pulse = (1 + math.Sin(s.t0/128)) / 2
 	s.pinv = 1 - s.pulse
+	if km.Released(ebiten.KeyLeft) {
+		s.gr.Render = (s.gr.Render + 1) % 2
+	}
 	s.gr.Tick()
 	return true, nil
 }

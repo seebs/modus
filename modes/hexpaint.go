@@ -3,6 +3,7 @@ package modes
 import (
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
+	"seebs.net/modus/keys"
 	"seebs.net/modus/sound"
 )
 
@@ -113,7 +114,7 @@ func (s *hexPaintScene) Hide() error {
 	return nil
 }
 
-func (s *hexPaintScene) Tick(voice *sound.Voice) (bool, error) {
+func (s *hexPaintScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 	s.cycle = (s.cycle + 1) % s.mode.cycleTime
 	if s.cycle != 0 {
 		return false, nil

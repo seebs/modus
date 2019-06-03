@@ -86,7 +86,10 @@ var (
 			if dy < m {
 				m = dy
 			}
-			grey := 1 - math.Sqrt(dx2+dy2) - (m / .3)
+			// We multiply in an extra copy of whichever of dx/dy is smaller, to generate a sort of concave
+			// look.
+			grey := (1 - math.Sqrt(dx2+dy2)) * (1.05 - math.Sqrt(m)) * (1.05 - math.Sqrt(dx)) * (1.05 - math.Sqrt(dy))
+
 			if grey < 0 {
 				grey = 0
 			}
@@ -396,7 +399,7 @@ func createSolidTexture() (*textureWithVertices, error) {
 	if err != nil {
 		return nil, err
 	}
-	img.Fill(color.RGBA{255, 255, 255, 255})
+	_ = img.Fill(color.RGBA{255, 255, 255, 255})
 	// special case: since it's a solid texture, just use the same point repeatedly.
 	v := ebiten.Vertex{SrcX: 0.5, SrcY: 0.5, ColorR: 1.0, ColorG: 1.0, ColorB: 1.0, ColorA: 1.0}
 	vs := []ebiten.Vertex{v, v, v}
@@ -406,19 +409,19 @@ func createSolidTexture() (*textureWithVertices, error) {
 
 func createDotTextures() (*textureWithVertices, error) {
 	twv := &textureWithVertices{}
-	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64, Y: 64}})
-	scalef := float32(30)
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 128, Y: 128}})
+	scalef := float32(62)
 
 	for render := 0; render < len(dotRenders); render++ {
 		fn := dotRenders[render]
-		offsetX := (render % 2) * 32
-		offsetY := (render / 2) * 32
+		offsetX := (render % 2) * 64
+		offsetY := (render / 2) * 64
 		offsetXf := float32(offsetX)
 		offsetYf := float32(offsetY)
 		// fill in the insides, roughly:
-		for i := 1; i < 31; i++ {
-			for j := 1; j < 31; j++ {
-				v := fn(float32(i-16)/15, float32(j-16)/15)
+		for i := 1; i < 63; i++ {
+			for j := 1; j < 63; j++ {
+				v := fn((float32(i)-31.5)/30.5, (float32(j)-31.5)/30.5)
 				col := color.RGBA{v, v, v, v}
 				img.Set(i+offsetX, j+offsetY, col)
 			}
@@ -463,7 +466,7 @@ func renderHexTextures() {
 	}
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Scale(0.5, 0.5)
-	hexData.img.DrawImage(hexTex2x, op)
+	_ = hexData.img.DrawImage(hexTex2x, op)
 	hexTex2x.Dispose()
 }
 

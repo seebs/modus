@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"seebs.net/modus/g"
+	"seebs.net/modus/keys"
 	"seebs.net/modus/modes"
 	"seebs.net/modus/sound"
 
@@ -41,52 +42,7 @@ var (
 var lagCounter = 0
 var pause = false
 
-// handle keypresses
-const (
-	PRESS   = 0x01
-	RELEASE = 0x02
-	HOLD    = 0x03
-)
-
-type keyMap map[ebiten.Key]byte
-
-// State returns the current state of a key
-func (km keyMap) State(k ebiten.Key) byte {
-	if _, ok := km[k]; !ok {
-		km[k] = 0
-	}
-	return km[k] & HOLD
-}
-
-func (km keyMap) Pressed(k ebiten.Key) bool {
-	return km.State(k) == PRESS
-}
-
-func (km keyMap) Released(k ebiten.Key) bool {
-	return km.State(k) == RELEASE
-}
-
-func (km keyMap) Held(k ebiten.Key) bool {
-	return km.State(k) == HOLD
-}
-
-func (km keyMap) Update() {
-	for i := range km {
-		state := byte(0)
-		if ebiten.IsKeyPressed(i) {
-			state = 1
-		}
-		km[i] = ((km[i] & 0x1) << 1) | state
-	}
-}
-
-var keys = keyMap{
-	ebiten.KeyQ:     0,
-	ebiten.KeySpace: 0,
-	ebiten.KeyLeft:  0,
-	ebiten.KeyRight: 0,
-	ebiten.KeyUp:    0,
-}
+var km = keys.NewMap(ebiten.KeyQ, ebiten.KeySpace, ebiten.KeyLeft, ebiten.KeyRight, ebiten.KeyUp)
 
 var frames = 0
 var tps float64
@@ -104,26 +60,26 @@ func update(screen *ebiten.Image) error {
 		tps += cTPS
 		frames++
 	}
-	keys.Update()
+	km.Update()
 
-	if keys.Released(ebiten.KeyQ) {
+	if km.Released(ebiten.KeyQ) {
 		return errors.New("quit requested")
 	}
-	if keys.Pressed(ebiten.KeySpace) {
+	if km.Pressed(ebiten.KeySpace) {
 		pause = !pause
 	}
-	if keys.Pressed(ebiten.KeyUp) {
+	if km.Pressed(ebiten.KeyUp) {
 		err := newMode()
 		if err != nil {
 			return err
 		}
 	}
-	if keys.Released(ebiten.KeyRight) {
+	if km.Released(ebiten.KeyRight) {
 		step = true
 	}
 
 	if !pause || step {
-		stepped, err := scene.Tick(voice)
+		stepped, err := scene.Tick(voice, km)
 		if stepped {
 			step = false
 		}
