@@ -205,6 +205,7 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, scale float32) {
 	offset := 0
 	r := dotData.vsByR[dg.Render]
+	thickness := dg.Thickness * dotData.scales[dg.Render]
 	for i := 0; i < dg.Major; i++ {
 		for j := 0; j < dg.Major; j++ {
 			s := &state[i][j]
@@ -212,7 +213,7 @@ func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, sca
 			// scale is a multiplier on the base thickness/size of
 			// dots
 			x, y := (s.X/2+0.5+dg.coordOffsetX)*dg.sy, (s.Y/2+0.5+dg.coordOffsetY)*dg.sy
-			size := dg.Thickness * s.S
+			size := thickness * s.S
 			vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 			vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
 			vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale

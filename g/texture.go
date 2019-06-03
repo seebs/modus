@@ -164,9 +164,10 @@ var (
 // textureWithVertices holds an image representing multiple render types,
 // and corresponding vertex values by render type. types == len(vsByR).
 type textureWithVertices struct {
-	types int
-	img   *ebiten.Image
-	vsByR [][]ebiten.Vertex
+	types  int
+	img    *ebiten.Image
+	vsByR  [][]ebiten.Vertex
+	scales []float32
 }
 
 func hexTextureWidth(cols int) int {
@@ -411,6 +412,8 @@ func createDotTextures() (*textureWithVertices, error) {
 	twv := &textureWithVertices{}
 	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 128, Y: 128}})
 	scalef := float32(62)
+	sums := make([]int, len(dotRenders))
+	maxSum := 0
 
 	for render := 0; render < len(dotRenders); render++ {
 		fn := dotRenders[render]
@@ -418,13 +421,19 @@ func createDotTextures() (*textureWithVertices, error) {
 		offsetY := (render / 2) * 64
 		offsetXf := float32(offsetX)
 		offsetYf := float32(offsetY)
+		sum := 0
 		// fill in the insides, roughly:
 		for i := 1; i < 63; i++ {
 			for j := 1; j < 63; j++ {
 				v := fn((float32(i)-31.5)/30.5, (float32(j)-31.5)/30.5)
+				sum += int(v)
 				col := color.RGBA{v, v, v, v}
 				img.Set(i+offsetX, j+offsetY, col)
 			}
+		}
+		sums[render] = sum
+		if sum > maxSum {
+			maxSum = sum
 		}
 		dotVertices := make([]ebiten.Vertex, 4)
 		for i := 0; i < 4; i++ {
@@ -433,6 +442,14 @@ func createDotTextures() (*textureWithVertices, error) {
 			dotVertices[i].SrcY = offsetYf + 2 + dotVertices[i].SrcY*scalef
 		}
 		twv.vsByR = append(twv.vsByR, dotVertices)
+	}
+	twv.scales = make([]float32, len(dotRenders))
+	for i := 0; i < len(dotRenders); i++ {
+		if sums[i] > 0 {
+			twv.scales[i] = math.Sqrt(float32(maxSum) / float32(sums[i]))
+		} else {
+			twv.scales[i] = 1
+		}
 	}
 	twv.types = len(twv.vsByR)
 	var err error
