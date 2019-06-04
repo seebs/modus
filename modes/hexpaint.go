@@ -123,7 +123,7 @@ func (s *hexPaintScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		c.IncAlpha(-0.001)
 	})
 	p := &s.painters[s.nextPainter]
-	p.ILoc = s.gr.Add(p.ILoc, p.dir.IVec())
+	p.ILoc, _ = s.gr.Add(p.ILoc, p.dir.IVec())
 	p.P = s.gr.IncP(p.ILoc, 2)
 	p.c.Cell.Alpha = 1
 	p.apply()

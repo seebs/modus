@@ -45,6 +45,12 @@ type FLoc struct {
 	X, Y float32
 }
 
+// FVec is a float version of IVec, used for things that aren't precisely
+// on the grid.
+type FVec struct {
+	X, Y float32
+}
+
 // moveCoordinate moves x by dx, returning new x, new dx, and whether or
 // not a bounce happened.
 func moveCoordinate(x, dx float32, min, max int) (float32, float32, bool) {

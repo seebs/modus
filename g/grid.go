@@ -40,15 +40,21 @@ func (gr *SquareGrid) NewLoc() ILoc {
 
 // Add adds the provided vector and location, then wraps to produce a value
 // within the bounds of the grid.
-func (gr *SquareGrid) Add(l ILoc, v IVec) ILoc {
+func (gr *SquareGrid) Add(l ILoc, v IVec) (ILoc, bool) {
+	wrapped := false
 	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
+	if (x < l.X && v.X > 0) || (y < l.Y && v.Y > 0) {
+		wrapped = true
+	}
 	if x < 0 {
+		wrapped = true
 		x += gr.Width
 	}
 	if y < 0 {
+		wrapped = true
 		y += gr.Height
 	}
-	return ILoc{X: x, Y: y}
+	return ILoc{X: x, Y: y}, wrapped
 }
 
 func (gr *SquareGrid) Palette() *Palette {
@@ -112,7 +118,7 @@ func newSquareGrid(w int, r RenderType, p *Palette, sx, sy int) *SquareGrid {
 
 type Grid interface {
 	NewLoc() ILoc
-	Add(ILoc, IVec) ILoc
+	Add(ILoc, IVec) (ILoc, bool)
 	At(ILoc) *Cell
 	IncP(ILoc, int) Paint
 	IncAlpha(ILoc, float32)
@@ -185,13 +191,13 @@ func (gr *SquareGrid) Splash(l ILoc, min, max int, fn GridFunc) {
 	}
 	for depth := min; depth <= max; depth++ {
 		for i, j := 0, depth; i < depth; i, j = i+1, j-1 {
-			there := gr.Add(l, IVec{i, j})
+			there, _ := gr.Add(l, IVec{i, j})
 			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
-			there = gr.Add(l, IVec{j, -i})
+			there, _ = gr.Add(l, IVec{j, -i})
 			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
-			there = gr.Add(l, IVec{-i, -j})
+			there, _ = gr.Add(l, IVec{-i, -j})
 			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
-			there = gr.Add(l, IVec{-j, i})
+			there, _ = gr.Add(l, IVec{-j, i})
 			fn(gr, there, depth, &gr.Cells[there.X][there.Y])
 		}
 	}

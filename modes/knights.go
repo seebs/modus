@@ -145,7 +145,7 @@ func (s *knightScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		c.IncAlpha(-0.001)
 	})
 	k := &s.knights[s.nextKnight]
-	k.ILoc = s.gr.Add(k.ILoc, knightMove())
+	k.ILoc, _ = s.gr.Add(k.ILoc, knightMove())
 	k.P = s.gr.IncP(k.ILoc, 2)
 	k.c.Cell.Alpha = 1
 	k.apply()

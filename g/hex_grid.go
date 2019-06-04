@@ -7,14 +7,8 @@ import (
 	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
 )
-
-// HexVec is a 3-coordinate vector that can be used to modify
-// a location on a grid. Z = +X-Y. We don't enforce consistency
-// on this; we just add the coordinates and expect it to work out.
-type HexVec struct {
-	X, Y, Z int
-}
 
 type HexDir int
 
@@ -25,11 +19,18 @@ func (h HexDir) IVec() IVec {
 	return hexDirections[h%6]
 }
 
-func (h HexDir) Left() HexDir {
-	return (h + 5) % 6
+func (h HexDir) FVec() FVec {
+	if h < 0 {
+		return FVec{X: 0, Y: 0}
+	}
+	return hexFloatDirections[h%6]
 }
 
 func (h HexDir) Right() HexDir {
+	return (h + 5) % 6
+}
+
+func (h HexDir) Left() HexDir {
 	return (h + 1) % 6
 }
 
@@ -42,15 +43,13 @@ var hexDirections = []IVec{
 	{X: 0, Y: 1},
 }
 
-// IVec converts a HexVec back to an IVec, by applying the Z
-// vector changes.
-func (v HexVec) IVec() IVec {
-	return IVec{X: v.X + v.Z, Y: v.Y - v.Z}
-}
-
-// HexVec converts an IVec to a hex vector with Z=0.
-func (v IVec) HexVec() HexVec {
-	return HexVec{X: v.X, Y: v.Y}
+var hexFloatDirections = []FVec{
+	{X: 1, Y: 0},
+	{X: 0.5, Y: -1}, // +Z
+	{X: -0.5, Y: -1},
+	{X: -1, Y: 0},
+	{X: -0.5, Y: 1}, // -Z
+	{X: .5, Y: 1},
 }
 
 // FloatingHexCell represents a floating cell which also supports Z
@@ -85,12 +84,25 @@ type HexGrid struct {
 	hexWidth, hexHeight float32
 	perHexHeight        float32
 	palette             *Palette
-	Cells               [][]Cell
+	Cells               [][]HexCell
 	ExtraCells          []*FloatingHexCell
 	render              RenderType
 	vertices            []ebiten.Vertex
 	indices             []uint16
+	hexDirs             [6][2]float32
 	ox, oy              float32 // offset to draw grid at for centering
+	Status              string
+}
+
+type HexCell struct {
+	Cell
+	HexMotion
+}
+
+// HexMotion reflects the motion of a thing on a hex grid.
+type HexMotion struct {
+	Dir  HexDir
+	Dist float32
 }
 
 // NewDir yields a random hex direction
@@ -166,13 +178,19 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 	// fmt.Printf("hexHeight %.1f, sy %d, vHexes %f, total %f\n", hexHeight, sy, vHexes, totalHeight)
 	// fmt.Printf("ox %.1f, oy %.1f\n", gr.ox, gr.oy)
 
-	gr.Cells = make([][]Cell, gr.Width)
+	for i := 0; i < 6; i++ {
+		ivec := HexDir(i).FVec()
+		gr.hexDirs[i][0] = float32(ivec.X) * gr.hexWidth
+		gr.hexDirs[i][1] = float32(ivec.Y) * gr.hexHeight * 3 / 4
+	}
+
+	gr.Cells = make([][]HexCell, gr.Width)
 	gr.vertices = make([]ebiten.Vertex, 0, 3*gr.Width*gr.Height)
 	gr.indices = make([]uint16, 0, 3*gr.Width*gr.Height)
 	for col := range gr.Cells {
-		r := make([]Cell, gr.Height)
+		r := make([]HexCell, gr.Height)
 		for row := range r {
-			r[row] = Cell{Alpha: 1, Scale: .95}
+			r[row] = HexCell{Cell: Cell{Alpha: 1, Scale: .95}}
 			offset := uint16(len(gr.vertices))
 			gr.vertices = append(gr.vertices, hexData.vsByR[gr.render]...)
 			gr.indices = append(gr.indices, offset+0, offset+1, offset+2)
@@ -203,7 +221,7 @@ func (gr *HexGrid) center(row, col int, scale float32) (x, y float32) {
 	return (x + gr.ox) * scale, (y + gr.oy) * scale
 }
 
-func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
+func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *HexCell) {
 	x, y = x-int(gr.ox), y-int(gr.oy)
 	xInt, xOffset := math.Modf(float32(x) / gr.hexWidth)
 	yInt, yOffset := math.Modf(float32(y) / gr.perHexHeight)
@@ -240,7 +258,7 @@ func (gr *HexGrid) CellAt(x, y int) (l ILoc, c *Cell) {
 	}
 }
 
-func (gr *HexGrid) Cell(x, y int) (ILoc, *Cell) {
+func (gr *HexGrid) Cell(x, y int) (ILoc, *HexCell) {
 	x, y = x%gr.Width, y%gr.Height
 	if x < 0 {
 		x += gr.Width
@@ -269,14 +287,19 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 			r, g, b, _ := gr.palette.Float32(cell.P)
 			a := cell.Alpha
 			var aff Affine
-			if cell.Theta != 0 || cell.Scale != 1 {
-				aff = IdentityAffine()
-				aff.Rotate(cell.Theta + math.Pi/2)
-				aff.Scale(cell.Scale*radius, cell.Scale*radius)
-			} else {
-				aff = baseMatrix
+			aff = baseMatrix
+			if cell.Theta != 0 {
+				aff.Rotate(cell.Theta)
+			}
+			if cell.Scale != 1 {
+				aff.Scale(cell.Scale, cell.Scale)
 			}
 			aff.E, aff.F = gr.center(row, col, scale)
+			if cell.Dist != 0 {
+				aff.E += gr.hexDirs[cell.Dir][0] * cell.Dist
+				aff.F += gr.hexDirs[cell.Dir][1] * cell.Dist
+			}
+			// ebitenutil.DebugPrintAt(target, fmt.Sprintf("%d,%d", col, row), int(aff.E-10), int(aff.F-15))
 			for j := 0; j < 3; j++ {
 				tri[j].ColorR, tri[j].ColorG, tri[j].ColorB, tri[j].ColorA = r, g, b, a
 				tri[j].DstX, tri[j].DstY = aff.Project(hd[j][0], hd[j][1])
@@ -285,19 +308,20 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 		}
 	}
 	target.DrawTriangles(gr.vertices, gr.indices, hexData.img, op)
+	ebitenutil.DebugPrint(target, gr.Status)
 }
 
 // Iterate runs fn on the entire grid.
 func (gr *HexGrid) Iterate(fn GridFunc) {
 	for i, col := range gr.Cells {
 		for j := range col {
-			fn(gr, ILoc{X: i, Y: j}, 1, &col[j])
+			fn(gr, ILoc{X: i, Y: j}, 1, &col[j].Cell)
 		}
 	}
 }
 
 func (gr *HexGrid) At(l ILoc) *Cell {
-	return &gr.Cells[l.X][l.Y]
+	return &gr.Cells[l.X][l.Y].Cell
 }
 
 func (gr *HexGrid) IncP(l ILoc, n int) Paint {
@@ -320,17 +344,17 @@ func (gr *HexGrid) Splash(l ILoc, min, max int, fn GridFunc) {
 		min = 0
 	}
 	if min == 0 {
-		fn(gr, l, 0, &gr.Cells[l.X][l.Y])
+		fn(gr, l, 0, &gr.Cells[l.X][l.Y].Cell)
 		min++
 	}
 	for depth := min; depth <= max; depth++ {
 		for idx, vec := range hexDirections {
-			loc := gr.Add(l, vec.Times(depth))
+			loc, _ := gr.Add(l, vec.Times(depth))
 			right := hexDirections[(idx+2)%len(hexDirections)]
-			fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y])
+			fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y].Cell)
 			for i := 1; i < depth; i++ {
-				loc = gr.Add(loc, right)
-				fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y])
+				loc, _ = gr.Add(loc, right)
+				fn(gr, loc, depth, &gr.Cells[loc.X][loc.Y].Cell)
 			}
 		}
 	}
@@ -340,13 +364,33 @@ func (gr *HexGrid) Neighbors(l ILoc, fn GridFunc) {
 	gr.Splash(l, 1, 1, fn)
 }
 
-func (gr *HexGrid) Add(l ILoc, v IVec) ILoc {
+func (gr *HexGrid) Add(l ILoc, v IVec) (ILoc, bool) {
+	wrapped := false
 	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
 	if x < 0 {
 		x += gr.Width
 	}
+	tx1 := (l.X + l.Y/2) % gr.Width
+	tx2 := (x + y/2) % gr.Width
+	if (tx2 < tx1 && v.X > 0) || (y < l.Y && v.Y > 0) {
+		wrapped = true
+	}
+	if tx2 > tx1 && v.X < 0 {
+		wrapped = true
+	}
 	if y < 0 {
 		y += gr.Height
+		wrapped = true
 	}
-	return ILoc{X: x, Y: y}
+	return ILoc{X: x, Y: y}, wrapped
+}
+
+// Neighbor yields the neighbor in the given direction, wrapping if wrap is
+// true, otherwise returning nil for edge cases.
+func (gr *HexGrid) Neighbor(old ILoc, d HexDir, wrap bool) (c *HexCell, loc ILoc) {
+	loc, wrapped := gr.Add(old, hexDirections[d])
+	if wrapped && !wrap {
+		return nil, loc
+	}
+	return &gr.Cells[loc.X][loc.Y], loc
 }
