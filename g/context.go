@@ -38,6 +38,11 @@ func (c *Context) NewSquareGrid(w int, r RenderType, p *Palette) *SquareGrid {
 	return newSquareGrid(w, r, p, c.w, c.h)
 }
 
+// NewParticles returns a particle-emitter source.
+func (c *Context) NewParticles(w int, r RenderType, p *Palette) *Particles {
+	return newParticles(w, r, p, c.w, c.h)
+}
+
 // NewHexGrid returns a grid of hexes with width "w"
 // across its wider dimension.
 func (c *Context) NewHexGrid(w int, r RenderType, p *Palette) *HexGrid {

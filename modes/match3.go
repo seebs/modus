@@ -23,7 +23,7 @@ var match3Modes = []match3Mode{
 
 func init() {
 	for _, mode := range match3Modes {
-		allModes = append(allModes, mode)
+		allModes = append([]Mode{mode}, allModes...)
 	}
 }
 
@@ -57,6 +57,8 @@ type match3Scene struct {
 	gr        *g.HexGrid
 	cycle     int
 	mode      match3Mode
+	explode   bool
+	splashy   *g.Particles
 }
 
 func newMatch3Scene(m match3Mode, gctx *g.Context, detail int, p *g.Palette) (*match3Scene, error) {
@@ -91,6 +93,7 @@ func (s *match3Scene) Display() error {
 	}
 	s.gr.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
 		c.P = g.Paint(rand.Int31n(6))
+		c.Scale = 0.75
 		c.Alpha = 0.75
 	})
 	return nil
@@ -154,17 +157,44 @@ func (s *match3Scene) getMatches(update bool) int {
 	return matches
 }
 
+// explodeColor matches everything of the given color.
+func (s *match3Scene) explodeColor(exploding g.Paint) int {
+	matches := 0
+	cells := s.gr.Cells
+	for i := 0; i < len(cells); i++ {
+		for j := 0; j < len(cells[i]); j++ {
+			if cells[i][j].P != exploding {
+				continue
+			}
+			matches++
+			s.matching[i][j] = true
+			s.fading = append(s.fading, locCell{HexCell: &cells[i][j], ILoc: g.ILoc{X: i, Y: j}})
+		}
+	}
+	return matches
+}
+
 //
 func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 	s.cycle = (s.cycle + 1) % s.mode.cycleTime
 	if s.cycle != 0 {
 		return false, nil
 	}
+	if s.splashy != nil {
+		if s.splashy.Tick() {
+			s.splashy = nil
+		}
+	}
 	switch {
 	case len(s.fading) > 0: // fade things first
 		n := 0
 		for _, c := range s.fading {
 			c.Alpha += s.fadeDir
+			if c.Alpha >= 0.75 {
+				c.Scale = c.Alpha
+			} else {
+				c.Scale = 0.75
+			}
 			if c.Alpha <= 0 {
 				s.erased = append(s.erased, c)
 				c.Alpha = 0
@@ -187,6 +217,8 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		} else {
 			s.gr.Status = fmt.Sprintf("fading %d hexes, alpha %.2f", n, s.fading[0].Alpha)
 		}
+	case s.splashy != nil:
+		// just wait for the splash animation to complete.
 	case len(s.erased) > 0:
 		s.gr.Status = "things to move!"
 		dir := g.HexDir(s.nextMatch)
@@ -240,12 +272,9 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			for _, c := range addedCells {
 				c.P = g.Paint(rand.Int31n(6))
 			}
-			// give up for now
+			// give up for now.
 			if counter > 1000 {
-				fmt.Printf("couldn't create match. cells:\n")
-				for _, c := range addedCells {
-					fmt.Printf(" %d,%d\n", c.ILoc.X, c.ILoc.Y)
-				}
+				s.explode = true
 				break
 			}
 		}
@@ -282,8 +311,25 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			s.gr.Status = fmt.Sprintf("found %d matches", n)
 			s.fadeDir = float32(1) / 32
 		} else {
-			s.gr.Status = fmt.Sprintf("found no matches")
-			s.nextMatch = (s.nextMatch + 1) % 6
+			if s.explode {
+				s.explodeColor(s.nextMatch)
+				s.explode = false
+			} else {
+				s.gr.Status = fmt.Sprintf("found no matches")
+				s.nextMatch = (s.nextMatch + 1) % 6
+			}
+		}
+		s.splashy = s.gctx.NewParticles(s.gr.Width*4, 1, s.palette)
+		for _, c := range s.fading {
+			// add a particle animation for each c
+			for i := 0; i < 7; i++ {
+				p := s.splashy.Add(g.SecondSplasher, (c.P+g.Paint(i))%6)
+				p.X, p.Y = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
+				p.X += (rand.Float32() - 0.5) * s.splashy.Size / 2
+				p.Y += (rand.Float32() - 0.5) * s.splashy.Size / 2
+				p.DX = (rand.Float32() - 0.5) * s.splashy.Size / 4
+				p.DY = (rand.Float32() - 0.5) * s.splashy.Size / 4
+			}
 		}
 	}
 	return true, nil
@@ -292,6 +338,10 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 func (s *match3Scene) Draw(screen *ebiten.Image) error {
 	s.gctx.Render(screen, func(t *ebiten.Image, scale float32) {
 		s.gr.Draw(t, scale)
+		if s.splashy != nil {
+			s.splashy.Draw(t, scale)
+		}
+
 	})
 	return nil
 }

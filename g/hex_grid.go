@@ -270,6 +270,10 @@ func (gr *HexGrid) Cell(x, y int) (ILoc, *HexCell) {
 	return l, &gr.Cells[l.X][l.Y]
 }
 
+func (gr *HexGrid) CenterFor(x, y int) (x1, y1 float32) {
+	return gr.center(x, y, 1.0)
+}
+
 func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 	CreateHexTextures()
 
