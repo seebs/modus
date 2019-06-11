@@ -46,21 +46,22 @@ type locCell struct {
 	*g.HexCell
 }
 type match3Scene struct {
-	nextMatch g.Paint
-	fading    []locCell
-	erased    []locCell
-	moving    []locCell
-	matching  [][]bool
-	fallSpeed float32
-	fadeDir   float32
-	palette   *g.Palette
-	gctx      *g.Context
-	detail    int
-	gr        *g.HexGrid
-	cycle     int
-	mode      match3Mode
-	explode   bool
-	splashy   *g.Particles
+	nextMatch  g.Paint
+	fading     []locCell
+	erased     []locCell
+	moving     []locCell
+	matching   [][]bool
+	fallSpeed  float32
+	fadeDir    float32
+	palette    *g.Palette
+	gctx       *g.Context
+	detail     int
+	gr         *g.HexGrid
+	cycle      int
+	mode       match3Mode
+	explode    bool
+	splashy    *g.Particles
+	toneOffset int
 }
 
 func newMatch3Scene(m match3Mode, gctx *g.Context, detail int, p *g.Palette) (*match3Scene, error) {
@@ -205,6 +206,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			}
 		}
 		if s.fading[0].Scale >= 1 {
+			s.fading[0].Scale = 1
 			s.fadeDir *= -1
 		}
 		s.fading = s.fading[:n]
@@ -266,6 +268,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		}
 		// check whether we'd find matches:
 		s.nextMatch = (s.nextMatch + 1) % 6
+		s.toneOffset = (s.toneOffset + 1) % 15
 		counter := 0
 		// fmt.Printf("trying to create matches for color %d after adding %d\n", s.nextMatch, len(addedCells))
 		for s.getMatches(false) == 0 {
@@ -311,6 +314,9 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		if n > 0 {
 			s.gr.Status = fmt.Sprintf("found %d matches", n)
 			s.fadeDir = float32(1) / 32
+			for i := 0; i < n && i < 3; i++ {
+				voice.Play((int(s.nextMatch)+s.toneOffset+(i*3))%15, 75-(20*i))
+			}
 		} else {
 			if s.explode {
 				s.explodeColor(s.nextMatch)
@@ -326,6 +332,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			for i := 0; i < 5; i++ {
 				p := s.splashy.Add(g.SecondSplasher, c.P)
 				p.Alpha = 0
+				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
 				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
 				p.X = (rand.Float32() - 0.5) / 2
@@ -336,6 +343,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			for i := 0; i < 3; i++ {
 				p := s.splashy.Add(g.SecondSplasher, c.P+g.Paint(rand.Int31n(5))+1)
 				p.Alpha = 0
+				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
 				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
 				p.X = (rand.Float32() - 0.5) / 2

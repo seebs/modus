@@ -19,24 +19,21 @@ import (
 	"github.com/seebs/gogetopt"
 )
 
-const (
+var (
+	gctx         *g.Context
+	timedOut     <-chan time.Time
+	tx           = 640
+	ty           = 240
+	dtx          = 0
+	dty          = 1
+	num          = 20
+	voice        *sound.Voice
+	allModes     []modes.Mode
+	currentMode  int
+	scene        modes.Scene
+	step         bool
 	screenWidth  = 1280
 	screenHeight = 960
-)
-
-var (
-	gctx        *g.Context
-	timedOut    <-chan time.Time
-	tx          = 640
-	ty          = 240
-	dtx         = 0
-	dty         = 1
-	num         = 20
-	voice       *sound.Voice
-	allModes    []modes.Mode
-	currentMode int
-	scene       modes.Scene
-	step        bool
 )
 
 var lagCounter = 0
@@ -114,7 +111,7 @@ func newMode() error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pPqs#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pPqs#x#y#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
 	}
@@ -139,13 +136,13 @@ func main() {
 		defer func() {
 			f, err := os.Create("heap-profile.dat")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "can't create heap-profile.dat: %s", err)
+				fmt.Fprintf(os.Stderr, "can't create heap-profile.dat: %s\n", err)
 			} else {
 				pprof.Lookup("heap").WriteTo(f, 0)
 			}
 			f, err = os.Create("alloc-profile.dat")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "can't create alloc-profile.dat: %s", err)
+				fmt.Fprintf(os.Stderr, "can't create alloc-profile.dat: %s\n", err)
 			} else {
 				pprof.Lookup("allocs").WriteTo(f, 0)
 			}
@@ -153,6 +150,13 @@ func main() {
 	}
 	if opts.Seen("s") {
 		timedOut = time.After(time.Duration(opts["s"].Int) * time.Second)
+	}
+	if opts.Seen("x") != opts.Seen("y") {
+		fmt.Fprintf(os.Stderr, "x and y must be used together\n")
+	}
+	if opts.Seen("x") && opts.Seen("y") {
+		screenWidth = opts["x"].Int
+		screenHeight = opts["y"].Int
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
 	allModes = modes.ListModes()

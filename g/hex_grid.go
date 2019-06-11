@@ -303,7 +303,21 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 				aff.E += gr.hexDirs[cell.Dir][0] * cell.Dist
 				aff.F += gr.hexDirs[cell.Dir][1] * cell.Dist
 			}
-			// ebitenutil.DebugPrintAt(target, fmt.Sprintf("%d,%d", col, row), int(aff.E-10), int(aff.F-15))
+			adj := make([]string, 6)
+			for i := 0; i < 6; i++ {
+				c, _ := gr.Neighbor(ILoc{X: col, Y: row}, HexDir(i), false)
+				if c != nil {
+					adj[i] = "Y"
+				} else {
+					adj[i] = "N"
+				}
+			}
+			if false {
+				ebitenutil.DebugPrintAt(target, fmt.Sprintf("  %s  %s\n%s %2d,%2d %s\n  %s  %s",
+					adj[2], adj[1], adj[3],
+					col, row,
+					adj[0], adj[4], adj[5]), int(aff.E-25), int(aff.F-25))
+			}
 			for j := 0; j < 3; j++ {
 				tri[j].ColorR, tri[j].ColorG, tri[j].ColorB, tri[j].ColorA = r, g, b, a
 				tri[j].DstX, tri[j].DstY = aff.Project(hd[j][0], hd[j][1])
@@ -368,25 +382,39 @@ func (gr *HexGrid) Neighbors(l ILoc, fn GridFunc) {
 	gr.Splash(l, 1, 1, fn)
 }
 
-func (gr *HexGrid) Add(l ILoc, v IVec) (ILoc, bool) {
-	wrapped := false
-	x, y := (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
-	if x < 0 {
-		x += gr.Width
+// Add attempts to determine not only what the new location
+// would be, but whether it wrapped. This is difficult because
+// of the strange offset grid compromise; as you move down the
+// screen (positive Y), X coordinate 0 gradually drifts to the
+// right, but wrapping stays at the screen edges.
+//
+// We assume the location starts out in the normalized range.
+func (gr *HexGrid) Add(l ILoc, v IVec) (loc ILoc, wrapped bool) {
+	loc.X, loc.Y = (l.X+v.X)%gr.Width, (l.Y+v.Y)%gr.Height
+	if loc.X < 0 {
+		// this may not constitute "wrapping" if we're in a
+		// line where 0 is somewhere in the mid-screen.
+		loc.X += gr.Width
 	}
+	// negative Y is always a wrap at the top edge
+	if loc.Y < 0 {
+		loc.Y += gr.Height
+		return loc, true
+	}
+	// Y should have increased, but is now smaller; that also wrapped.
+	if loc.Y < l.Y && v.Y > 0 {
+		return loc, true
+	}
+	// X is effectively incremented by Y/2. v.X * 2 + v.Y has the same
+	// sign as effective-X.
+	sx := (v.X * 2) + v.Y
+
 	tx1 := (l.X + l.Y/2) % gr.Width
-	tx2 := (x + y/2) % gr.Width
-	if (tx2 < tx1 && v.X > 0) || (y < l.Y && v.Y > 0) {
-		wrapped = true
+	tx2 := (loc.X + loc.Y/2) % gr.Width
+	if (tx2-tx1)*sx < 0 {
+		return loc, true
 	}
-	if tx2 > tx1 && v.X < 0 {
-		wrapped = true
-	}
-	if y < 0 {
-		y += gr.Height
-		wrapped = true
-	}
-	return ILoc{X: x, Y: y}, wrapped
+	return loc, false
 }
 
 // Neighbor yields the neighbor in the given direction, wrapping if wrap is
