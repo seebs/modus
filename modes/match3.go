@@ -10,6 +10,8 @@ import (
 	"seebs.net/modus/sound"
 )
 
+const match3GridScale = 0.8
+
 // match3Mode is one of the internal modes based on match3 thing
 type match3Mode struct {
 	cycleTime int // number of ticks to go by between updates
@@ -86,15 +88,15 @@ func (s *match3Scene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *match3Scene) Display() error {
-	s.gr = s.gctx.NewHexGrid(s.detail, 1, s.palette)
+	s.gr = s.gctx.NewHexGrid(s.detail, 3, s.palette)
 	s.matching = make([][]bool, len(s.gr.Cells))
 	for i := range s.gr.Cells {
 		s.matching[i] = make([]bool, len(s.gr.Cells[i]))
 	}
 	s.gr.Iterate(func(generic g.Grid, l g.ILoc, n int, c *g.Cell) {
 		c.P = g.Paint(rand.Int31n(6))
-		c.Scale = 0.75
-		c.Alpha = 0.75
+		c.Scale = match3GridScale
+		c.Alpha = 1.0
 	})
 	return nil
 }
@@ -189,21 +191,20 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 	case len(s.fading) > 0: // fade things first
 		n := 0
 		for _, c := range s.fading {
-			c.Alpha += s.fadeDir
-			if c.Alpha >= 0.75 {
-				c.Scale = c.Alpha
-			} else {
-				c.Scale = 0.75
+			c.Scale += s.fadeDir
+			if s.fadeDir < 0 {
+				c.Alpha = c.Scale
 			}
-			if c.Alpha <= 0 {
+			if c.Scale <= 0 {
 				s.erased = append(s.erased, c)
 				c.Alpha = 0
+				c.Scale = match3GridScale
 			} else {
 				s.fading[n] = c
 				n++
 			}
 		}
-		if s.fading[0].Alpha >= 1 {
+		if s.fading[0].Scale >= 1 {
 			s.fadeDir *= -1
 		}
 		s.fading = s.fading[:n]
@@ -248,7 +249,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 					*gone.HexCell = *c
 					gone.HexCell.Dir = dir
 					gone.HexCell.Dist = float32(skipped)
-					gone.HexCell.Alpha = 0.75
+					gone.HexCell.Alpha = 1.0
 					s.moving = append(s.moving, gone)
 					gone.HexCell, gone.ILoc = s.gr.Neighbor(gone.ILoc, dir, false)
 				}
@@ -257,7 +258,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 				gone.HexCell.Dir = dir
 				gone.HexCell.Dist = float32(skipped)
 				gone.HexCell.P = g.Paint(rand.Int31n(6))
-				gone.HexCell.Alpha = 0.75
+				gone.HexCell.Alpha = 1.0
 				addedCells = append(addedCells, gone)
 				s.moving = append(s.moving, gone)
 				gone.HexCell, gone.ILoc = s.gr.Neighbor(gone.ILoc, dir, false)
@@ -322,13 +323,25 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		s.splashy = s.gctx.NewParticles(s.gr.Width*4, 1, s.palette)
 		for _, c := range s.fading {
 			// add a particle animation for each c
-			for i := 0; i < 7; i++ {
-				p := s.splashy.Add(g.SecondSplasher, (c.P+g.Paint(i))%6)
-				p.X, p.Y = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
-				p.X += (rand.Float32() - 0.5) * s.splashy.Size / 2
-				p.Y += (rand.Float32() - 0.5) * s.splashy.Size / 2
-				p.DX = (rand.Float32() - 0.5) * s.splashy.Size / 4
-				p.DY = (rand.Float32() - 0.5) * s.splashy.Size / 4
+			for i := 0; i < 5; i++ {
+				p := s.splashy.Add(g.SecondSplasher, c.P)
+				p.Alpha = 0
+				p.Delay = int(rand.Int31n(6))
+				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
+				p.X = (rand.Float32() - 0.5) / 2
+				p.Y += (rand.Float32() - 0.5) / 2
+				p.DX = (rand.Float32() - 0.5) / 4
+				p.DY = (rand.Float32() - 0.5) / 4
+			}
+			for i := 0; i < 3; i++ {
+				p := s.splashy.Add(g.SecondSplasher, c.P+g.Paint(rand.Int31n(5))+1)
+				p.Alpha = 0
+				p.Delay = int(rand.Int31n(6))
+				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
+				p.X = (rand.Float32() - 0.5) / 2
+				p.Y += (rand.Float32() - 0.5) / 2
+				p.DX = (rand.Float32() - 0.5) / 4
+				p.DY = (rand.Float32() - 0.5) / 4
 			}
 		}
 	}

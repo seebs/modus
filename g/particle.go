@@ -62,7 +62,7 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 		vs := ps.vertices[offset : offset+4]
 		// scale is a multiplier on the base thickness/size of
 		// dots
-		x, y := ps.X+p.X, ps.Y+p.Y
+		x, y := ps.X+p.X0+(p.X*ps.Size), ps.Y+p.Y0+(p.Y*ps.Size)
 		size := thickness * p.Scale
 		vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 		vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
@@ -79,7 +79,7 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, p.Alpha
 		offset += 4
 	}
-	target.DrawTriangles(ps.vertices, ps.indices, dotData.img, &opt)
+	target.DrawTriangles(ps.vertices, ps.indices[:len(ps.particles)*6], dotData.img, &opt)
 	ebitenutil.DebugPrint(target, ps.status)
 }
 
@@ -87,7 +87,8 @@ type Particle struct {
 	P      Paint
 	Scale  float32
 	Alpha  float32
-	X, Y   float32 // relative to emitter
+	X, Y   float32 // relative to X0, Y0
+	X0, Y0 float32 // starting point
 	DX, DY float32
 	Tick   int
 	Delay  int
