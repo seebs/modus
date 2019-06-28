@@ -47,6 +47,7 @@ type locCell struct {
 }
 type match3Scene struct {
 	nextMatch  g.Paint
+	matchCount int
 	fading     []locCell
 	erased     []locCell
 	moving     []locCell
@@ -119,39 +120,37 @@ func (s *match3Scene) getMatches(update bool) int {
 			}
 			for d := 0; d < 3; d++ {
 				run := 1
-				loc1 := start
 				dir1 := g.HexDir(d)
-				loc2 := start
 				dir2 := g.HexDir(d + 3)
-				for c1, l1 := s.gr.Neighbor(loc1, dir1, false); c1 != nil && c1.P == s.nextMatch; c1, l1 = s.gr.Neighbor(loc1, dir1, false) {
+				for c1, l1 := s.gr.Neighbor(start, dir1, false); c1 != nil && c1.P == s.nextMatch; c1, l1 = s.gr.Neighbor(l1, dir1, false) {
 					run++
-					loc1 = l1
 				}
-				for c2, l2 := s.gr.Neighbor(loc2, dir2, false); c2 != nil && c2.P == s.nextMatch; c2, l2 = s.gr.Neighbor(loc2, dir2, false) {
+				for c2, l2 := s.gr.Neighbor(start, dir2, false); c2 != nil && c2.P == s.nextMatch; c2, l2 = s.gr.Neighbor(l2, dir2, false) {
 					run++
-					loc2 = l2
 				}
 				if run >= 3 {
+					// without update, we actually just don't care
+					if !update {
+						return 1
+					}
 					matches++
-					if update && !s.matching[i][j] {
+					if !s.matching[i][j] {
 						s.matching[i][j] = true
 						s.fading = append(s.fading, locCell{HexCell: &cells[i][j], ILoc: g.ILoc{X: i, Y: j}})
 					}
-					for c1, l1 := s.gr.Neighbor(loc1, dir1, false); c1 != nil && c1.P == s.nextMatch; c1, l1 = s.gr.Neighbor(loc1, dir1, false) {
-						if update && !s.matching[loc1.X][loc1.Y] {
-							s.matching[loc1.X][loc1.Y] = true
-							s.fading = append(s.fading, locCell{HexCell: c1, ILoc: g.ILoc{X: loc1.X, Y: loc1.Y}})
+					for c1, l1 := s.gr.Neighbor(start, dir1, false); c1 != nil && c1.P == s.nextMatch; c1, l1 = s.gr.Neighbor(l1, dir1, false) {
+						if !s.matching[l1.X][l1.Y] {
+							s.matching[l1.X][l1.Y] = true
+							s.fading = append(s.fading, locCell{HexCell: c1, ILoc: g.ILoc{X: l1.X, Y: l1.Y}})
 
 						}
-						loc1 = l1
 					}
-					for c2, l2 := s.gr.Neighbor(loc2, dir2, false); c2 != nil && c2.P == s.nextMatch; c2, l2 = s.gr.Neighbor(loc2, dir2, false) {
-						if update && !s.matching[loc2.X][loc2.Y] {
-							s.matching[loc2.X][loc2.Y] = true
-							s.fading = append(s.fading, locCell{HexCell: c2, ILoc: g.ILoc{X: loc2.X, Y: loc2.Y}})
+					for c2, l2 := s.gr.Neighbor(start, dir2, false); c2 != nil && c2.P == s.nextMatch; c2, l2 = s.gr.Neighbor(l2, dir2, false) {
+						if !s.matching[l2.X][l2.Y] {
+							s.matching[l2.X][l2.Y] = true
+							s.fading = append(s.fading, locCell{HexCell: c2, ILoc: g.ILoc{X: l2.X, Y: l2.Y}})
 
 						}
-						loc2 = l2
 					}
 				}
 			}
@@ -218,7 +217,7 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 				}
 			}
 		} else {
-			s.gr.Status = fmt.Sprintf("fading %d hexes, alpha %.2f", n, s.fading[0].Alpha)
+			s.gr.Status = fmt.Sprintf("fading %d hexes for %d matches, alpha %.2f", n, s.matchCount, s.fading[0].Alpha)
 		}
 	case s.splashy != nil:
 		// just wait for the splash animation to complete.
@@ -310,17 +309,18 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 			s.gr.Status = fmt.Sprintf("moving %d hexes, dist %.2f", n, s.moving[0].Dist)
 		}
 	default:
-		n := s.getMatches(true)
-		if n > 0 {
-			s.gr.Status = fmt.Sprintf("found %d matches", n)
+		s.matchCount = s.getMatches(true)
+		if s.matchCount > 0 {
+			s.gr.Status = fmt.Sprintf("found %d matches", s.matchCount)
 			s.fadeDir = float32(1) / 32
-			for i := 0; i < n && i < 3; i++ {
+			for i := 0; i < s.matchCount && i < 3; i++ {
 				voice.Play((int(s.nextMatch)+s.toneOffset+(i*3))%15, 75-(20*i))
 			}
 		} else {
 			if s.explode {
 				s.explodeColor(s.nextMatch)
 				s.explode = false
+				voice.Play((int(s.nextMatch)+s.toneOffset)%15, 75)
 			} else {
 				s.gr.Status = fmt.Sprintf("found no matches")
 				s.nextMatch = (s.nextMatch + 1) % 6
