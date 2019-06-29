@@ -1,6 +1,7 @@
 package g
 
 import (
+	"fmt"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten"
@@ -52,7 +53,10 @@ func (c *Context) NewHexGrid(w int, r RenderType, p *Palette) *HexGrid {
 // NewDotGrid returns a grid of dots with width "w" across its wider
 // dimension.
 func (c *Context) NewDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette) *DotGrid {
-	return newDotGrid(w, thickness, depth, r, p, c.w, c.h)
+	scale, ox, oy, cx, cy := c.Centered()
+	fmt.Printf("scale: %g, ox/oy: %g/%g, cx/cy: %g/%g\n",
+		scale, ox, oy, cx, cy)
+	return newDotGrid(w, thickness, depth, r, p, scale, ox, oy, cx, cy)
 }
 
 // NewSpiral returns a spiral for the given Context.
@@ -62,6 +66,33 @@ func (c *Context) NewSpiral(depth int, r RenderType, points int, p *Palette, cyc
 
 func (c *Context) NewPolyline(thickness int, r RenderType, p *Palette) *PolyLine {
 	return newPolyLine(thickness, r, p)
+}
+
+// Centered yields a scale factor and X/Y offsets for converting X/Y values in
+// a -1..+1 range to screen coordinates for the ebiten.Image the context uses
+// to render to. The entire [-1,-1] to [1,1] space is on-screen; if the screen
+// is not square, the wider coordinate's visible range will be broader. The
+// coordinate offsets represent the additional visible area on each side of
+// the screen; one of them (corresponding to the smaller dimension) is always
+// zero.
+//
+// Example: If the context is 1200x800, scale should be 400, and offsetY should be
+// 400, so Y -1 converts to 0, and Y 1 converts to 800. offsetX should be 600.
+// Meanwhile, coordX will be 0.5; the lowest X coordinate should be -1.5, and
+// the highest 1.5.
+func (c *Context) Centered() (scale, offsetX, offsetY, coordX, coordY float32) {
+	if c.w > c.h {
+		scale = float32(c.h) / 2
+		offsetY = scale
+		offsetX = float32(c.w) / 2
+		coordX = (float32(c.w) - float32(c.h)) / float32(c.h) / 2
+	} else {
+		scale = float32(c.w) / 2
+		offsetX = scale
+		offsetY = float32(c.h) / 2
+		coordY = (float32(c.h) - float32(c.w)) / float32(c.w) / 2
+	}
+	return scale, offsetX, offsetY, coordX, coordY
 }
 
 func (c *Context) DrawSize() (int, int) {
@@ -74,6 +105,7 @@ func (c *Context) DrawSize() (int, int) {
 
 func (c *Context) Render(screen *ebiten.Image, fn func(*ebiten.Image, float32)) {
 	if c.multisample {
+		// should probably be checking these errors
 		c.fsaa.Fill(color.RGBA{0, 0, 0, 0})
 		fn(c.fsaa, 2)
 		screen.DrawImage(c.fsaa, c.fsaaOp)

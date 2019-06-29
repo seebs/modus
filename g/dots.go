@@ -28,11 +28,12 @@ type DotGrid struct {
 	depthVertices              [][]ebiten.Vertex
 	depthDirty                 []bool
 	indices                    []uint16
-	sx, sy                     float32
-	scale                      float32
-	alphaDecay                 float32
-	alphaDecays                []float32
-	status                     string
+	// coordinate space to screen space
+	scale, ox, oy float32
+	gridScale     float32
+	alphaDecay    float32
+	alphaDecays   []float32
+	status        string
 }
 
 // DotGridBase represents the underlying qualities of a point; it's populated
@@ -67,18 +68,18 @@ func dotSetup() {
 	textureSetup()
 }
 
-func makeDotGridHeight(w, sx, sy int) (int, int, int, int, float32) {
+func makeDotGridHeight(w int, sx, sy float32) (int, int, int, int, float32) {
 	var h int
 	var major, minor *int
 	var scale float32
 	for {
 		if sx > sy {
-			scale = math.Floor(float32(sx) / float32(w))
-			h = int(math.Floor(float32(sy) / scale))
+			scale = math.Floor(sx / float32(w))
+			h = int(math.Floor(sy / scale))
 		} else {
 			// compute sizes for portrait mode, then flip x and y
-			scale = math.Floor(float32(sy) / float32(w))
-			h = int(math.Floor(float32(sx) / scale))
+			scale = math.Floor(sy / float32(w))
+			h = int(math.Floor(sx / scale))
 			w, h = h, w
 		}
 		if w > h {
@@ -97,24 +98,34 @@ func makeDotGridHeight(w, sx, sy int) (int, int, int, int, float32) {
 			w--
 		}
 	}
-	fmt.Printf("%dx%d (size %d) [%d indices]\n", w, h, *major, (*major)*(*major)*6)
-	return w, h, *major, *minor, scale
+	fmt.Printf("%dx%d (size %d) [%d indices], grid scale %f\n", w, h, *major, (*major)*(*major)*6, scale*2)
+	return w, h, *major, *minor, scale * 2
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, sx, sy int) *DotGrid {
+func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, scale, ox, oy, cx, cy float32) *DotGrid {
 	initDotData.Do(dotSetup)
 	var h, major, minor int
-	var scale float32
-	w, h, major, minor, scale = makeDotGridHeight(w, sx, sy)
+	var gridScale float32
+	w, h, major, minor, gridScale = makeDotGridHeight(w, ox*2, oy*2)
 	// thickness was originally calculated by reference to width=20 on a 1280px screen, so...
 	// 1280px/20 width => 64px spacing
-	thickness *= float32(sx) / float32(w) / 32
+	thickness *= float32(gridScale) / float32(h) / 32
 	if thickness < 2 {
 		thickness = 2
 	}
 
-	dg := &DotGrid{Palette: p, Thickness: thickness, W: w, H: h, Major: major, Minor: minor, sx: float32(sx), sy: float32(sy), scale: scale, depth: depth}
+	dg := &DotGrid{
+		Palette:   p,
+		Thickness: thickness,
+		W:         w, H: h,
+		Major: major, Minor: minor,
+		scale: scale,
+		ox:    ox, oy: oy,
+		coordOffsetX: cx, coordOffsetY: cy,
+		gridScale: gridScale,
+		depth:     depth,
+	}
 	if dg.depth > 1 {
 		dg.alphaDecay = math.Pow(1/float32(dg.depth), 1/float32(dg.depth-1))
 	} else {
@@ -137,12 +148,10 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	dg.states = make([][][]DotGridState, dg.depth)
 	dg.baseDots = make([][]DotGridBase, dg.Major)
 	dg.depthDirty = make([]bool, dg.depth)
-	dg.baseOffset = float32(dg.Major-dg.Minor) / 2
 	if dg.W == dg.Major {
-		dg.coordOffsetX = dg.baseOffset / float32(dg.Minor)
+		dg.baseOffset = dg.coordOffsetX
 	} else {
-		dg.coordOffsetY = dg.baseOffset / float32(dg.Minor)
-
+		dg.baseOffset = dg.coordOffsetY
 	}
 
 	fmt.Printf("%dx%d [actually %d/%d]: baseOffset %.2f, coordOffset %.2f/%.2f\n",
@@ -151,9 +160,9 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	for i := range dg.baseDots {
 		dots := make([]DotGridBase, dg.Major)
 		dg.baseDots[i] = dots
-		x0 := (((float32(i) - dg.baseOffset) / float32(dg.H-1)) - 0.5) * 2
+		x0 := (((float32(i) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
 		for j := range dots {
-			y0 := (((float32(j) - dg.baseOffset) / float32(dg.H-1)) - 0.5) * 2
+			y0 := (((float32(j) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
 			dots[j].X, dots[j].Y = x0, y0
 			/*
 			 * 0  1
@@ -212,7 +221,7 @@ func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, sca
 			vs := dvs[offset : offset+4]
 			// scale is a multiplier on the base thickness/size of
 			// dots
-			x, y := (s.X/2+0.5+dg.coordOffsetX)*dg.sy, (s.Y/2+0.5+dg.coordOffsetY)*dg.sy
+			x, y := ((s.X+dg.coordOffsetX)*dg.scale)+dg.ox, ((s.Y+dg.coordOffsetY)*dg.scale)+dg.oy
 			size := thickness * s.S
 			vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 			vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale

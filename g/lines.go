@@ -7,6 +7,7 @@ import (
 
 	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
 )
 
 // A PolyLine represents a series of line segments, each
@@ -30,6 +31,8 @@ type PolyLine struct {
 	vertices   []ebiten.Vertex
 	indices    []uint16
 	dirty      bool
+	glowing    bool
+	status     string // debug status message if any
 }
 
 // A LinePoint is one point in a PolyLine, containing both
@@ -71,6 +74,14 @@ func (pl *PolyLine) Debug(enable bool) {
 	} else {
 		pl.debug = nil
 	}
+}
+
+func (pl *PolyLine) SetGlow(enable bool) {
+	pl.glowing = true
+}
+
+func (pl *PolyLine) SetStatus(status string) {
+	pl.status = status
 }
 
 type LineBits struct {
@@ -407,6 +418,7 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha float32, scale float32) {
 	if pl.debug != nil {
 		pl.debug.Draw(target, alpha, scale)
 	}
+	ebitenutil.DebugPrint(target, pl.status)
 }
 
 // Length yields the number of points in the line.
