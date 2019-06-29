@@ -1,7 +1,6 @@
 package g
 
 import (
-	"fmt"
 	"image/color"
 
 	"github.com/hajimehoshi/ebiten"
@@ -54,18 +53,18 @@ func (c *Context) NewHexGrid(w int, r RenderType, p *Palette) *HexGrid {
 // dimension.
 func (c *Context) NewDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette) *DotGrid {
 	scale, ox, oy, cx, cy := c.Centered()
-	fmt.Printf("scale: %g, ox/oy: %g/%g, cx/cy: %g/%g\n",
-		scale, ox, oy, cx, cy)
 	return newDotGrid(w, thickness, depth, r, p, scale, ox, oy, cx, cy)
 }
 
 // NewSpiral returns a spiral for the given Context.
 func (c *Context) NewSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int) *Spiral {
-	return newSpiral(depth, r, points, p, cycles, offset)
+	scale, ox, oy, _, _ := c.Centered()
+	return newSpiral(depth, r, points, p, cycles, offset, scale, ox, oy)
 }
 
 func (c *Context) NewPolyline(thickness int, r RenderType, p *Palette) *PolyLine {
-	return newPolyLine(thickness, r, p)
+	scale, ox, oy, _, _ := c.Centered()
+	return newPolyLine(thickness, r, p, scale, ox, oy)
 }
 
 // Centered yields a scale factor and X/Y offsets for converting X/Y values in
@@ -85,12 +84,12 @@ func (c *Context) Centered() (scale, offsetX, offsetY, coordX, coordY float32) {
 		scale = float32(c.h) / 2
 		offsetY = scale
 		offsetX = float32(c.w) / 2
-		coordX = (float32(c.w) - float32(c.h)) / float32(c.h) / 2
+		coordX = (float32(c.w) - float32(c.h)) / float32(c.h)
 	} else {
 		scale = float32(c.w) / 2
 		offsetX = scale
 		offsetY = float32(c.h) / 2
-		coordY = (float32(c.h) - float32(c.w)) / float32(c.w) / 2
+		coordY = (float32(c.h) - float32(c.w)) / float32(c.w)
 	}
 	return scale, offsetX, offsetY, coordX, coordY
 }

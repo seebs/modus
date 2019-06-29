@@ -19,8 +19,10 @@ var hexPaintModes = []hexPaintMode{
 }
 
 func init() {
-	for _, mode := range hexPaintModes {
-		allModes = append(allModes, mode)
+	if false {
+		for _, mode := range hexPaintModes {
+			allModes = append(allModes, mode)
+		}
 	}
 }
 

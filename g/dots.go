@@ -103,14 +103,15 @@ func makeDotGridHeight(w int, sx, sy float32) (int, int, int, int, float32) {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, scale, ox, oy, cx, cy float32) *DotGrid {
+func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, scale, ox, oy, coordOffsetX, coordOffsetY float32) *DotGrid {
 	initDotData.Do(dotSetup)
 	var h, major, minor int
 	var gridScale float32
 	w, h, major, minor, gridScale = makeDotGridHeight(w, ox*2, oy*2)
 	// thickness was originally calculated by reference to width=20 on a 1280px screen, so...
-	// 1280px/20 width => 64px spacing
-	thickness *= float32(gridScale) / float32(h) / 32
+	// 1280px/20 width => 64px spacing. but now we're looking at the center-offset, not the
+	// screen size, so...
+	thickness *= ox / float32(h) / 16
 	if thickness < 2 {
 		thickness = 2
 	}
@@ -122,7 +123,7 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 		Major: major, Minor: minor,
 		scale: scale,
 		ox:    ox, oy: oy,
-		coordOffsetX: cx, coordOffsetY: cy,
+		coordOffsetX: coordOffsetX, coordOffsetY: coordOffsetY,
 		gridScale: gridScale,
 		depth:     depth,
 	}
@@ -221,7 +222,7 @@ func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, sca
 			vs := dvs[offset : offset+4]
 			// scale is a multiplier on the base thickness/size of
 			// dots
-			x, y := ((s.X+dg.coordOffsetX)*dg.scale)+dg.ox, ((s.Y+dg.coordOffsetY)*dg.scale)+dg.oy
+			x, y := (s.X*dg.scale)+dg.ox, (s.Y*dg.scale)+dg.oy
 			size := thickness * s.S
 			vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 			vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale

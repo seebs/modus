@@ -30,8 +30,8 @@ var ripplePattern = []int{-1, -2, 0, 2, 1, 0, -1, 0, 1}
 var defaultThetaRatio = float32(4.0)
 
 // newSpiral creates a new spiral.
-func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int) *Spiral {
-	s := &Spiral{Depth: depth, render: r, Length: points}
+func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offset int, scale, offsetX, offsetY float32) *Spiral {
+	s := &Spiral{Depth: depth, render: r, Length: points, Step: 1}
 	// we want to make it through the palette cycles times; for instance,
 	// if cycles is 3, we want a total of 18 color shifts, divided among
 	// s.Length segments, so that's the interpolation scale.
@@ -43,7 +43,7 @@ func newSpiral(depth int, r RenderType, points int, p *Palette, cycles int, offs
 	s.thetas = make([]float32, s.Length)
 	s.SetThetaRatio(defaultThetaRatio)
 	for i := 0; i < s.Depth; i++ {
-		l := newPolyLine(3, r, s.Palette)
+		l := newPolyLine(3, r, s.Palette, scale, offsetX, offsetY)
 		l.Joined = true
 		l.Blend = true
 		l.Points = make([]LinePoint, s.Length)

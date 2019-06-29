@@ -43,8 +43,10 @@ var knightModes = []knightMode{
 }
 
 func init() {
-	for _, mode := range knightModes {
-		allModes = append(allModes, mode)
+	if false {
+		for _, mode := range knightModes {
+			allModes = append(allModes, mode)
+		}
 	}
 }
 

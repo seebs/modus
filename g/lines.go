@@ -20,19 +20,21 @@ import (
 // that away and presenting a polyline interface is more
 // convenient.
 type PolyLine struct {
-	Points     []LinePoint
-	Thickness  float32
-	render     RenderType
-	Palette    *Palette
-	Blend      bool
-	Joined     bool // one segment per point past the first, rather than each pair a segment
-	DebugColor bool // use debug colors
-	debug      *PolyLine
-	vertices   []ebiten.Vertex
-	indices    []uint16
-	dirty      bool
-	glowing    bool
-	status     string // debug status message if any
+	Points           []LinePoint
+	Thickness        float32
+	scale            float32
+	offsetX, offsetY float32 // screen space conversion
+	render           RenderType
+	Palette          *Palette
+	Blend            bool
+	Joined           bool // one segment per point past the first, rather than each pair a segment
+	DebugColor       bool // use debug colors
+	debug            *PolyLine
+	vertices         []ebiten.Vertex
+	indices          []uint16
+	dirty            bool
+	glowing          bool
+	status           string // debug status message if any
 }
 
 // A LinePoint is one point in a PolyLine, containing both
@@ -58,18 +60,26 @@ func lineSetup() {
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
-func newPolyLine(thickness int, r RenderType, p *Palette) *PolyLine {
+func newPolyLine(thickness int, r RenderType, p *Palette, scale, offsetX, offsetY float32) *PolyLine {
 	initLineData.Do(lineSetup)
 	if r > 3 {
 		r = 3
 	}
-	pl := &PolyLine{Palette: p, render: r, Blend: true, Thickness: float32(thickness)}
+	pl := &PolyLine{
+		Palette:   p,
+		render:    r,
+		Blend:     true,
+		Thickness: float32(thickness),
+		scale:     scale,
+		offsetX:   offsetX,
+		offsetY:   offsetY,
+	}
 	return pl
 }
 
 func (pl *PolyLine) Debug(enable bool) {
 	if enable {
-		pl.debug = newPolyLine(2, 1, pl.Palette)
+		pl.debug = newPolyLine(2, 1, pl.Palette, pl.scale, pl.offsetX, pl.offsetY)
 		pl.debug.Thickness = 2
 	} else {
 		pl.debug = nil
@@ -153,6 +163,78 @@ func (pl *PolyLine) Dirty() {
 	pl.dirty = true
 }
 
+func (pl *PolyLine) vsPerSegment() int {
+	switch {
+	case pl.glowing && pl.Joined:
+		return 12
+	case pl.glowing && !pl.Joined:
+		return 8
+	case !pl.glowing && pl.Joined:
+		return 6
+	case !pl.glowing && !pl.Joined:
+		return 4
+	}
+	return 0
+}
+
+func (pl *PolyLine) idxsPerSegment() int {
+	switch {
+	case pl.glowing && pl.Joined:
+		return 30
+	case pl.glowing && !pl.Joined:
+		return 12
+	case !pl.glowing && pl.Joined:
+		return 15
+	case !pl.glowing && !pl.Joined:
+		return 6
+	}
+	return 0
+}
+
+func populateJoinedRGB(v []ebiten.Vertex, r0, g0, b0, r1, g1, b1, alpha float32) {
+	v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
+	v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
+	v[4].ColorR, v[4].ColorG, v[4].ColorB, v[4].ColorA = r0, g0, b0, alpha
+	v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA = r1, g1, b1, alpha
+	v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
+	v[5].ColorR, v[5].ColorG, v[5].ColorB, v[5].ColorA = r1, g1, b1, alpha
+	if len(v) == 12 {
+		alpha /= 2
+		v[6].ColorR, v[6].ColorG, v[6].ColorB, v[6].ColorA = 1, 1, 1, alpha
+		v[7].ColorR, v[7].ColorG, v[7].ColorB, v[7].ColorA = 1, 1, 1, alpha
+		v[10].ColorR, v[10].ColorG, v[10].ColorB, v[10].ColorA = 1, 1, 1, alpha
+		v[8].ColorR, v[8].ColorG, v[8].ColorB, v[8].ColorA = 1, 1, 1, alpha
+		v[9].ColorR, v[9].ColorG, v[9].ColorB, v[9].ColorA = 1, 1, 1, alpha
+		v[11].ColorR, v[11].ColorG, v[11].ColorB, v[11].ColorA = 1, 1, 1, alpha
+	}
+}
+
+func populateJoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb LineBits, halfthick, scale float32) {
+	v[0].DstX = float32(px+lb.nx*halfthick) * scale
+	v[0].DstY = float32(py+lb.ny*halfthick) * scale
+	v[1].DstX = float32(px-lb.nx*halfthick) * scale
+	v[1].DstY = float32(py-lb.ny*halfthick) * scale
+	v[2].DstX = float32(nx+lb.nx*halfthick) * scale
+	v[2].DstY = float32(ny+lb.ny*halfthick) * scale
+	v[3].DstX = float32(nx-lb.nx*halfthick) * scale
+	v[3].DstY = float32(ny-lb.ny*halfthick) * scale
+	v[4].DstX, v[4].DstY = float32(px)*scale, float32(py)*scale
+	v[5].DstX, v[5].DstY = float32(nx)*scale, float32(ny)*scale
+	if len(v) == 12 {
+		halfthick /= 2
+		v[6].DstX = float32(px+lb.nx*halfthick) * scale
+		v[6].DstY = float32(py+lb.ny*halfthick) * scale
+		v[7].DstX = float32(px-lb.nx*halfthick) * scale
+		v[7].DstY = float32(py-lb.ny*halfthick) * scale
+		v[8].DstX = float32(nx+lb.nx*halfthick) * scale
+		v[8].DstY = float32(ny+lb.ny*halfthick) * scale
+		v[9].DstX = float32(nx-lb.nx*halfthick) * scale
+		v[9].DstY = float32(ny-lb.ny*halfthick) * scale
+		v[10].DstX, v[10].DstY = float32(px)*scale, float32(py)*scale
+		v[11].DstX, v[11].DstY = float32(nx)*scale, float32(ny)*scale
+	}
+}
+
 func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vertices, indices int) {
 	segments := len(pl.Points) - 1
 	if segments < 1 {
@@ -160,17 +242,24 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 		fmt.Fprintf(os.Stderr, "polyline of %d segments can't be drawn\n", segments)
 		return
 	}
+	vsPerSegment := pl.vsPerSegment()
 	// populate with the SrcX, SrcY values.
-	if len(pl.vertices) < segments*6 {
+	if len(pl.vertices) < segments*vsPerSegment {
 		fv := lineData.vsByR[pl.render]
-		pl.vertices = make([]ebiten.Vertex, 0, segments*6)
+		pl.vertices = make([]ebiten.Vertex, 0, segments*vsPerSegment)
 		for i := 0; i < segments; i++ {
 			pl.vertices = append(pl.vertices, fv...)
 		}
+		if pl.glowing {
+			for i := 0; i < segments; i++ {
+				pl.vertices = append(pl.vertices, fv...)
+			}
+		}
 	}
 	// indices can never change, conveniently!
-	if len(pl.indices) < segments*15 {
-		for i := len(pl.indices) / 15; i < segments; i++ {
+	idxsPerSegment := pl.idxsPerSegment()
+	if len(pl.indices) < segments*idxsPerSegment {
+		for i := len(pl.indices) / 15; i < segments*idxsPerSegment; i++ {
 			offset := uint16(i * 6)
 			// Triangles are 4-0-2, 2-5-4, 1-4-5, 5-3-1
 			// bezel is a special case: it has to be altered
@@ -193,9 +282,19 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 	// Joined: We will draw one segment for each point past the first.
 	// Unjoined: We draw one segment for each pair.
 	var plb LineBits
+	px, py := (prev.X*pl.scale)+pl.offsetX, (prev.Y*pl.scale)+pl.offsetY
 	for idx, next := range pl.Points[1:] {
+		nx, ny := (next.X*pl.scale)+pl.offsetX, (next.Y*pl.scale)+pl.offsetY
+		// compute normal x/y values, scaled to unit length
 		lb := linebits(prev.X, prev.Y, next.X, next.Y)
-		bezel := pl.indices[count*15+12 : count*15+15]
+		var bezel, bezel2 []uint16
+		if pl.glowing {
+			bezel = pl.indices[count*30+12 : count*30+15]
+			bezel2 = pl.indices[count*30+27 : count*30+30]
+			bezel2[0], bezel2[1], bezel2[2] = 0, 0, 0
+		} else {
+			bezel = pl.indices[count*15+12 : count*15+15]
+		}
 		// make it a degenerate triangle so it gets ignored
 		bezel[0], bezel[1], bezel[2] = 0, 0, 0
 		if (lb.l == 0) || (!pl.Joined && (idx%2) == 1) {
@@ -205,27 +304,19 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)
 			plb = lb
+			px, py = nx, ny
 			// NOTE: This does not "fix up" a previous line's
 			// end points, which would normally be done while
 			// processing this line. That's probably correct
 			// when this line isn't drawn.
 			continue
 		}
-		// compute normal x/y values, scaled to unit length
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
-		offset := uint16(count * 6)
-		v := pl.vertices[offset : offset+6]
+		offset := uint16(count * vsPerSegment)
+		v := pl.vertices[offset : offset+uint16(vsPerSegment)]
 		// populate these with default values, which we'd use without the fancy algorithm
-		v[0].DstX = float32(prev.X+lb.nx*halfthick) * scale
-		v[0].DstY = float32(prev.Y+lb.ny*halfthick) * scale
-		v[1].DstX = float32(prev.X-lb.nx*halfthick) * scale
-		v[1].DstY = float32(prev.Y-lb.ny*halfthick) * scale
-		v[2].DstX = float32(next.X+lb.nx*halfthick) * scale
-		v[2].DstY = float32(next.Y+lb.ny*halfthick) * scale
-		v[3].DstX = float32(next.X-lb.nx*halfthick) * scale
-		v[3].DstY = float32(next.Y-lb.ny*halfthick) * scale
-		v[4].DstX, v[4].DstY = float32(prev.X)*scale, float32(prev.Y)*scale
-		v[5].DstX, v[5].DstY = float32(next.X)*scale, float32(next.Y)*scale
+		populateJoinedVs(v, px, py, nx, ny, lb, halfthick, scale)
+
 		if plb.l > 0 {
 			// fix up the overlap between these lines
 			theta := lb.theta
@@ -252,29 +343,49 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 			if left {
 				adjust(&v[1], lb.ux, lb.uy, scale*halfthick)
 				adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick)
-				bezel[0] = offset - 1
-				bezel[1] = offset - 4
-				bezel[2] = offset
+				if pl.glowing {
+					adjust(&v[7], lb.ux, lb.uy, scale*halfthick/2)
+					// undo half of the adjustment that was incorrect
+					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, +scale*halfthick/2)
+					adjust(&pl.vertices[offset-9], plb.ux, plb.uy, -scale*halfthick)
+					bezel[0] = offset - 1 - 6
+					bezel[1] = offset - 4 - 6
+					bezel[2] = offset - 6
+					bezel2[0] = offset - 1
+					bezel2[1] = offset - 4
+					bezel2[2] = offset
+				} else {
+					bezel[0] = offset - 1
+					bezel[1] = offset - 4
+					bezel[2] = offset
+				}
 			} else {
 				adjust(&v[0], lb.ux, lb.uy, scale*halfthick)
 				adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick)
-				bezel[0] = offset - 1
-				bezel[1] = offset + 1
-				bezel[2] = offset - 3
+				if pl.glowing {
+					adjust(&v[6], lb.ux, lb.uy, scale*halfthick/2)
+					// undo half of the adjustment that was incorrect
+					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, +scale*halfthick/2)
+					adjust(&pl.vertices[offset-10], plb.ux, plb.uy, -scale*halfthick)
+					bezel[0] = offset - 1 - 6
+					bezel[1] = offset + 1
+					bezel[2] = offset - 3 - 6
+					bezel2[0] = offset - 1
+					bezel2[1] = offset + 1 + 6
+					bezel2[2] = offset - 3
+				} else {
+					bezel[0] = offset - 1
+					bezel[1] = offset + 1
+					bezel[2] = offset - 3
+				}
 			}
 		}
 		if pl.Blend {
-			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
-			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
-			v[4].ColorR, v[4].ColorG, v[4].ColorB, v[4].ColorA = r0, g0, b0, alpha
+			populateJoinedRGB(v, r0, g0, b0, r1, g1, b1, alpha)
 		} else {
-			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r1, g1, b1, alpha
-			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r1, g1, b1, alpha
-			v[4].ColorR, v[4].ColorG, v[4].ColorB, v[4].ColorA = r1, g1, b1, alpha
+			populateJoinedRGB(v, r1, g1, b1, r1, g1, b1, alpha)
 		}
-		v[2].ColorR, v[2].ColorG, v[2].ColorB, v[2].ColorA = r1, g1, b1, alpha
-		v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
-		v[5].ColorR, v[5].ColorG, v[5].ColorB, v[5].ColorA = r1, g1, b1, alpha
+
 		if pl.DebugColor {
 			for i := 0; i < 6; i++ {
 				v[i].ColorR, v[i].ColorG, v[i].ColorB, v[i].ColorA = debugColors[i][0], debugColors[i][1], debugColors[i][2], 1.0
@@ -283,7 +394,6 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 
 		// add debugging segments
 		if pl.debug != nil && idx > 0 {
-			fmt.Printf("")
 			vX, vY := plb.ny-lb.ny, lb.nx-plb.nx
 			vX, vY = vX*halfthick, vY*halfthick
 			pl.debug.Add(prev.X, prev.Y, 4)
@@ -295,10 +405,11 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 		// rotate points
 		prev = next
 		plb = lb
+		px, py = nx, ny
 		// bump count since we drew a segment
 		count++
 	}
-	return count * 6, count * 15
+	return count * vsPerSegment, count * idxsPerSegment
 }
 
 // The easy case: We compute four vertices per segment,
@@ -337,8 +448,10 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 	// Joined: We will draw one segment for each point past the first.
 	// Unjoined: We draw one segment for each pair.
 	var plb LineBits
+	px, py := (prev.X*pl.scale)+pl.offsetX, (prev.Y*pl.scale)+pl.offsetY
 	for idx, next := range pl.Points[1:] {
 		lb := linebits(prev.X, prev.Y, next.X, next.Y)
+		nx, ny := (next.X*pl.scale)+pl.offsetX, (next.Y*pl.scale)+pl.offsetY
 		if (lb.l == 0) || (!pl.Joined && (idx%2) == 1) {
 			// don't draw 0-length line, don't divide by zero, but
 			// do update the point so we use the right color to draw
@@ -346,6 +459,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)
 			plb = lb
+			px, py = nx, ny
 			continue
 		}
 		// compute normal x/y values, scaled to unit length
@@ -353,14 +467,14 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
 		offset := uint16(count * 4)
 		v := pl.vertices[offset : offset+4]
-		v[0].DstX = float32(prev.X+lb.nx*halfthick) * scale
-		v[0].DstY = float32(prev.Y+lb.ny*halfthick) * scale
-		v[1].DstX = float32(prev.X-lb.nx*halfthick) * scale
-		v[1].DstY = float32(prev.Y-lb.ny*halfthick) * scale
-		v[2].DstX = float32(next.X+lb.nx*halfthick) * scale
-		v[2].DstY = float32(next.Y+lb.ny*halfthick) * scale
-		v[3].DstX = float32(next.X-lb.nx*halfthick) * scale
-		v[3].DstY = float32(next.Y-lb.ny*halfthick) * scale
+		v[0].DstX = float32(px+lb.nx*halfthick) * scale
+		v[0].DstY = float32(py+lb.ny*halfthick) * scale
+		v[1].DstX = float32(px-lb.nx*halfthick) * scale
+		v[1].DstY = float32(py-lb.ny*halfthick) * scale
+		v[2].DstX = float32(nx+lb.nx*halfthick) * scale
+		v[2].DstY = float32(ny+lb.ny*halfthick) * scale
+		v[3].DstX = float32(nx-lb.nx*halfthick) * scale
+		v[3].DstY = float32(ny-lb.ny*halfthick) * scale
 		if pl.Blend {
 			v[0].ColorR, v[0].ColorG, v[0].ColorB, v[0].ColorA = r0, g0, b0, alpha
 			v[1].ColorR, v[1].ColorG, v[1].ColorB, v[1].ColorA = r0, g0, b0, alpha
@@ -385,6 +499,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 		// rotate points
 		prev = next
 		plb = lb
+		px, py = nx, ny
 		// bump count since we drew a segment
 		count++
 	}

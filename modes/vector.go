@@ -21,7 +21,7 @@ type vectorMode struct {
 const vectorCycleTime = 1
 
 var vectorModes = []vectorMode{
-	{name: "Test", cycleTime: vectorCycleTime},
+	{name: "Test", cycleTime: vectorCycleTime, compute: simpleDemo, computeInit: simpleDemoInit},
 }
 
 func init() {
@@ -44,20 +44,24 @@ func (m vectorMode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error
 
 // simpleDemo is just a trivial test case
 func simpleDemoInit(s *vectorScene) {
-	points := make([]g.LinePoint, 3)
+	points := make([]g.LinePoint, 4)
+	s.pl.Joined = true
 	s.pl.Points = points
-	points[0].X, points[0].Y = 0, 0
-	points[1].X, points[1].Y = s.w/2, s.h/2
-	points[2].X, points[2].Y = s.w, s.h/2
+	points[0].X, points[0].Y, points[0].P = -1, -1, 0
+	points[1].X, points[1].Y, points[1].P = 0, -1, 1
+	points[2].X, points[2].Y, points[2].P = 0, 0, 2
+	points[3].X, points[3].Y, points[3].P = 1, 0, 4
+	s.pl.Dirty()
 }
 
-func simpleDemo(s *vectorScene) {
-	pt := s.pl.Point(2)
+func simpleDemo(s *vectorScene) string {
+	pt := s.pl.Point(3)
 	pt.X, pt.Y = math.Sincos(s.t0 / 256.0)
+	s.pl.Dirty()
+	return fmt.Sprintf("t0 %g, theta %g, pt[2].P %d, pt[3].P %d\n", s.t0, s.t0/256.0, s.pl.Point(2).P, s.pl.Point(3).P)
 }
 
 type vectorScene struct {
-	w, h    float32
 	palette *g.Palette
 	gctx    *g.Context
 	mode    vectorMode
@@ -92,9 +96,8 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *vectorScene) Display() error {
-	w, h := s.gctx.DrawSize()
-	s.w, s.h = float32(w), float32(h)
-	s.pl = s.gctx.NewPolyline(s.detail, 1, s.palette)
+	s.pl = s.gctx.NewPolyline(64, 3, s.palette)
+	s.pl.SetGlow(true)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
 	}
@@ -108,6 +111,7 @@ func (s *vectorScene) Hide() error {
 
 func (s *vectorScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 	s.cycle = (s.cycle + 1) % s.mode.cycleTime
+	s.t0++
 	if s.cycle != 0 {
 		return false, nil
 	}

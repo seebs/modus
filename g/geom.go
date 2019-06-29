@@ -94,15 +94,15 @@ func (m *MovingPoint) SetBounds(x, y int) {
 func (m *MovingPoint) PerturbVelocity() {
 	switch rand.Intn(3) {
 	case 0:
-		m.Velocity.X++
+		m.Velocity.X += 0.001
 	case 1:
-		m.Velocity.X--
+		m.Velocity.X -= 0.001
 	}
 	switch rand.Intn(3) {
 	case 0:
-		m.Velocity.Y++
+		m.Velocity.Y += 0.001
 	case 1:
-		m.Velocity.Y--
+		m.Velocity.Y -= 0.001
 	}
 }
 
