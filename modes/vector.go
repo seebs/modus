@@ -44,13 +44,15 @@ func (m vectorMode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error
 
 // simpleDemo is just a trivial test case
 func simpleDemoInit(s *vectorScene) {
-	points := make([]g.LinePoint, 4)
+	points := make([]g.LinePoint, 6)
 	s.pl.Joined = true
 	s.pl.Points = points
 	points[0].X, points[0].Y, points[0].P = -1, -1, 0
 	points[1].X, points[1].Y, points[1].P = 0, -1, 1
 	points[2].X, points[2].Y, points[2].P = 0, 0, 2
-	points[3].X, points[3].Y, points[3].P = 1, 0, 4
+	points[3].X, points[3].Y, points[3].P = 1, 0, 3
+	points[4].X, points[4].Y, points[4].P = -1, 1, 4
+	points[5].X, points[5].Y, points[5].P = 0, 0, 5
 	s.pl.Dirty()
 }
 
@@ -96,7 +98,7 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *vectorScene) Display() error {
-	s.pl = s.gctx.NewPolyline(64, 3, s.palette)
+	s.pl = s.gctx.NewPolyline(32, 3, s.palette)
 	s.pl.SetGlow(true)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
