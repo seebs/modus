@@ -5,7 +5,7 @@
 package g
 
 import (
-	"image"
+	"fmt"
 	"math"
 	"math/rand"
 )
@@ -17,7 +17,12 @@ import (
 type MovingPoint struct {
 	Loc      Point
 	Velocity Vec
-	Bounds   image.Rectangle
+	Bounds   Region
+}
+
+// A Region represents a rectangle with diagonal between two points.
+type Region struct {
+	Min, Max Point
 }
 
 // IVec represents a vector of motion within a grid. (Contrast time.Duration.)
@@ -53,24 +58,24 @@ type FVec struct {
 
 // moveCoordinate moves x by dx, returning new x, new dx, and whether or
 // not a bounce happened.
-func moveCoordinate(x, dx float32, min, max int) (float32, float32, bool) {
+func moveCoordinate(x, dx float32, min, max float32) (float32, float32, bool) {
 	bounce := false
 	x += dx
 	var dabs, dsign, base float32
-	if x < float32(min) {
-		dabs = float32(min) - x
+	if x < min {
+		dabs = min - x
 		dsign = -1
-		base = float32(min)
+		base = min
 		bounce = true
 	}
-	if x > float32(max) {
-		dabs = x - float32(max)
+	if x > max {
+		dabs = x - max
 		dsign = 1
-		base = float32(max)
+		base = max
 		bounce = true
 	}
 	if bounce {
-		scale := float32(max - min)
+		scale := max - min
 		// if moving too fast, slow down
 		if dabs > scale/2 {
 			dabs = scale / 2
@@ -82,11 +87,10 @@ func moveCoordinate(x, dx float32, min, max int) (float32, float32, bool) {
 	return x, dx, bounce
 }
 
-// SetBounds sets the bounds of a point to range from {0, 0}
-// to {x, y}.
-func (m *MovingPoint) SetBounds(x, y int) {
-	m.Bounds.Min = image.Point{X: 0, Y: 0}
-	m.Bounds.Max = image.Point{X: x, Y: y}
+// SetBounds sets the bounds of a point to range from min to max.
+func (m *MovingPoint) SetBounds(min, max Point) {
+	m.Bounds.Min = min
+	m.Bounds.Max = max
 }
 
 // PerturbVelocity randomly increments or decrements the velocity
@@ -111,6 +115,14 @@ func (m *MovingPoint) Update() bool {
 	m.Loc.X, m.Velocity.X, bounceX = moveCoordinate(m.Loc.X, m.Velocity.X, m.Bounds.Min.X, m.Bounds.Max.X)
 	m.Loc.Y, m.Velocity.Y, bounceY = moveCoordinate(m.Loc.Y, m.Velocity.Y, m.Bounds.Min.Y, m.Bounds.Max.Y)
 	return bounceX || bounceY
+}
+
+func (m MovingPoint) String() string {
+	return fmt.Sprintf("@%g,%g +%g,%g, >%g,%g <%g,%g",
+		m.Loc.X, m.Loc.Y,
+		m.Velocity.X, m.Velocity.Y,
+		m.Bounds.Min.X, m.Bounds.Min.Y,
+		m.Bounds.Max.X, m.Bounds.Max.Y)
 }
 
 // Affine is a trivial affine matrix
@@ -156,9 +168,21 @@ func (a Affine) Unproject(x1, y1 float32) (x0, y0 float32) {
 }
 
 // Scale scales by X and Y.
-func (a *Affine) Scale(xs, ys float32) *Affine {
-	a.A, a.C, a.E = a.A*xs, a.C*xs, a.E*xs
-	a.B, a.D, a.F = a.B*ys, a.D*ys, a.F*ys
+func (a *Affine) Scale(x, y float32) *Affine {
+	a.A, a.C, a.E = a.A*x, a.C*x, a.E*x
+	a.B, a.D, a.F = a.B*y, a.D*y, a.F*y
+	return a
+}
+
+func (a *Affine) String() string {
+	return fmt.Sprintf("a: %g, c: %g, e: %g\nb: %g, d: %g, f: %g\n",
+		a.A, a.C, a.E, a.B, a.D, a.F)
+}
+
+// Translate translates by X and Y
+func (a *Affine) Translate(x, y float32) *Affine {
+	a.E = a.E + x
+	a.F = a.F + y
 	return a
 }
 

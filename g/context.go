@@ -67,6 +67,11 @@ func (c *Context) NewPolyline(thickness int, r RenderType, p *Palette) *PolyLine
 	return newPolyLine(thickness, r, p, scale, ox, oy)
 }
 
+func (c *Context) NewWeave(thickness int, p *Palette) *Weave {
+	scale, ox, oy, _, _ := c.Centered()
+	return newWeave(thickness, p, scale, ox, oy)
+}
+
 // Centered yields a scale factor and X/Y offsets for converting X/Y values in
 // a -1..+1 range to screen coordinates for the ebiten.Image the context uses
 // to render to. The entire [-1,-1] to [1,1] space is on-screen; if the screen

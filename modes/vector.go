@@ -3,7 +3,6 @@ package modes
 import (
 	"fmt"
 
-	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
 	"seebs.net/modus/keys"
@@ -42,39 +41,74 @@ func (m vectorMode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error
 	return newVectorScene(m, gctx, detail, p)
 }
 
+type knotProto struct {
+	pts []g.LinePoint
+}
+
+var sampleKnots = map[string]knotProto{
+	"ship": knotProto{
+		pts: []g.LinePoint{
+			{X: 0, Y: -0.5},
+			{X: .25, Y: 0},
+			{X: 0.0, Y: 0.25},
+			{X: -.25, Y: 0},
+			{X: 0, Y: -0.5},
+			{X: -.125, Y: 0, Skip: true, P: 4},
+			{X: .125, Y: 0, P: 4},
+		},
+	},
+}
+
 // simpleDemo is just a trivial test case
 func simpleDemoInit(s *vectorScene) {
-	points := make([]g.LinePoint, 6)
-	s.pl.Joined = true
-	s.pl.Points = points
-	points[0].X, points[0].Y, points[0].P = -1, -1, 0
-	points[1].X, points[1].Y, points[1].P = 0, -1, 1
-	points[2].X, points[2].Y, points[2].P = 0, 0, 2
-	points[3].X, points[3].Y, points[3].P = 1, 0, 3
-	points[4].X, points[4].Y, points[4].P = -1, 1, 4
-	points[5].X, points[5].Y, points[5].P = 0, 0, 5
-	s.pl.Dirty()
+	for i := 0; i < 4; i++ {
+		proto := sampleKnots["ship"]
+		k1 := s.wv.NewKnot(len(proto.pts))
+		b := bouncer{k: k1}
+		copy(k1.Points, proto.pts)
+		k1.Dirty()
+		k1.Size = float32(1.0) / float32(i+1)
+		k1.X, k1.Y = -0.5+float32(i&1), -0.5+float32(i>>1)
+		b.pt = g.MovingPoint{Loc: g.Point{X: k1.X, Y: k1.Y}, Velocity: g.Vec{X: -k1.X * .002 * (float32(i) + 1), Y: -k1.Y * .002 * (float32(i) + 1)}, Bounds: s.bounds}
+		s.bouncers = append(s.bouncers, b)
+	}
 }
 
 func simpleDemo(s *vectorScene) string {
-	pt := s.pl.Point(3)
-	pt.X, pt.Y = math.Sincos(s.t0 / 256.0)
-	s.pl.Dirty()
-	return fmt.Sprintf("t0 %g, theta %g, pt[2].P %d, pt[3].P %d\n", s.t0, s.t0/256.0, s.pl.Point(2).P, s.pl.Point(3).P)
+	for idx := range s.bouncers {
+		b := &s.bouncers[idx]
+		b.pt.Update()
+		b.k.X, b.k.Y = b.pt.Loc.X, b.pt.Loc.Y
+		b.k.Theta = s.t0 / ((float32(idx) + 1) * 256)
+		b.k.Dirty()
+	}
+	return ""
 }
 
 type vectorScene struct {
-	palette *g.Palette
-	gctx    *g.Context
-	mode    vectorMode
-	pl      *g.PolyLine
-	detail  int
-	cycle   int
-	t0      float32
+	palette  *g.Palette
+	gctx     *g.Context
+	mode     vectorMode
+	wv       *g.Weave
+	detail   int
+	cycle    int
+	t0       float32
+	bouncers []bouncer
+	bounds   g.Region
+}
+
+type bouncer struct {
+	pt g.MovingPoint
+	k  *g.Knot
 }
 
 func newVectorScene(m vectorMode, gctx *g.Context, detail int, p *g.Palette) (*vectorScene, error) {
 	sc := &vectorScene{mode: m, gctx: gctx, detail: detail, palette: p}
+	_, _, _, cx, cy := gctx.Centered()
+	sc.bounds = g.Region{
+		Min: g.Point{X: -1 - cx, Y: -1 - cy},
+		Max: g.Point{X: 1 + cx, Y: 1 + cy},
+	}
 	err := sc.Reset(detail, p)
 	if err != nil {
 		return nil, err
@@ -98,8 +132,7 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *vectorScene) Display() error {
-	s.pl = s.gctx.NewPolyline(32, 3, s.palette)
-	s.pl.SetGlow(true)
+	s.wv = s.gctx.NewWeave(16, s.palette)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
 	}
@@ -107,7 +140,7 @@ func (s *vectorScene) Display() error {
 }
 
 func (s *vectorScene) Hide() error {
-	s.pl = nil
+	s.wv = nil
 	return nil
 }
 
@@ -118,14 +151,14 @@ func (s *vectorScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		return false, nil
 	}
 	if s.mode.compute != nil {
-		s.pl.SetStatus(s.mode.compute(s))
+		s.wv.SetStatus(s.mode.compute(s))
 	}
 	return true, nil
 }
 
 func (s *vectorScene) Draw(screen *ebiten.Image) error {
 	s.gctx.Render(screen, func(t *ebiten.Image, scale float32) {
-		s.pl.Draw(t, 1.0, scale)
+		s.wv.Draw(t, 1.0, scale)
 	})
 	return nil
 }
