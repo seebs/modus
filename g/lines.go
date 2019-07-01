@@ -43,6 +43,7 @@ type LinePoint struct {
 	X, Y float32
 	P    Paint
 	Skip bool
+	Glow bool // unimplemented
 }
 
 var (
@@ -315,15 +316,13 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 			continue
 		}
 		var bezel, bezel2 []uint16
-		if pl.glowing {
-			bezel = pl.indices[count*30+12 : count*30+15]
-			bezel2 = pl.indices[count*30+27 : count*30+30]
-			bezel2[0], bezel2[1], bezel2[2] = 0, 0, 0
-		} else {
-			bezel = pl.indices[count*15+12 : count*15+15]
-		}
-		// make it a degenerate triangle so it gets ignored
+		bezel = pl.indices[count*idxsPerSegment+12 : count*idxsPerSegment+15]
+		// make it a degenerate triangle so it gets ignored unless we use it later
 		bezel[0], bezel[1], bezel[2] = 0, 0, 0
+		if pl.glowing {
+			bezel2 = pl.indices[count*idxsPerSegment+27 : count*idxsPerSegment+30]
+			bezel2[0], bezel2[1], bezel2[2] = 0, 0, 0
+		}
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
 		offset := uint16(count * vsPerSegment)
 		v := pl.vertices[offset : offset+uint16(vsPerSegment)]
