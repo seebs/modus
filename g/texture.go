@@ -26,17 +26,17 @@ const (
 )
 
 var (
-	// line textures: each line gets a 32x32 box, which is a pixel-doubled
-	// 16x16 box, although only the middle 14x14 (28x28) are supposed to be
-	// used as the texture. The idea is to have boundaries around the part of
-	// the texture we use to keep the edges/ends from being rendered darker
-	// due when rendered with FilterLinear, even though actually I don't plan
-	// to use FilterLinear anymore anyway.
-	lineDepths = [4][16]byte{
-		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
-		{127, 127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127, 127},
-		{85, 85, 85, 127, 127, 127, 255, 255, 255, 255, 127, 127, 127, 85, 85, 85},
-		{63, 63, 63, 127, 127, 191, 191, 255, 255, 191, 191, 127, 127, 63, 63, 63},
+	// line textures: each line gets a 32x32 box, although only the middle
+	// 28x28 are supposed to be used as the texture. The idea is to have
+	// boundaries around the part of the texture we use to keep the
+	// edges/ends from being rendered darker when rendered with
+	// FilterLinear, even though actually I don't plan to use FilterLinear
+	// anymore anyway.
+	lineDepths = [4][32]byte{
+		{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+		{127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127},
+		{63, 63, 63, 78, 93, 107, 122, 137, 152, 166, 181, 196, 211, 225, 240, 255, 255, 240, 225, 211, 196, 181, 166, 152, 137, 122, 107, 93, 78, 63, 63, 63},
+		{15, 15, 15, 33, 52, 70, 89, 107, 126, 144, 163, 181, 200, 218, 237, 255, 255, 237, 218, 200, 181, 163, 144, 126, 107, 89, 70, 52, 33, 15, 15, 15},
 	}
 	// squareRenders defines the brightness/intensity of rings around the central point
 	// of a square.
@@ -254,7 +254,7 @@ func createLineTextures() (*textureWithVertices, error) {
 		offsetYf := float32(offsetY)
 		scalef := float32(28)
 		for r := 0; r < 32; r++ {
-			v := lineDepths[depth][r/2]
+			v := lineDepths[depth][r]
 			col := color.RGBA{v, v, v, v}
 			for c := 0; c < 14; c++ {
 				img.Set(offsetX+c*2, offsetY+r-1, col)

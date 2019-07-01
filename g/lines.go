@@ -51,6 +51,8 @@ var (
 	debugColors  [][3]float32
 )
 
+const glowScale = 1.0 / 3.0
+
 func lineSetup() {
 	textureSetup()
 	debugColors = make([][3]float32, 6)
@@ -223,7 +225,7 @@ func populateJoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb LineBits, ha
 	v[4].DstX, v[4].DstY = float32(px)*scale, float32(py)*scale
 	v[5].DstX, v[5].DstY = float32(nx)*scale, float32(ny)*scale
 	if len(v) == 12 {
-		halfthick /= 4
+		halfthick *= glowScale
 		v[6].DstX = float32(px+lb.nx*halfthick) * scale
 		v[6].DstY = float32(py+lb.ny*halfthick) * scale
 		v[7].DstX = float32(px-lb.nx*halfthick) * scale
@@ -336,14 +338,14 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 				theta += math.Pi * 2
 			}
 			dt := theta - plb.theta
-			// are we turning "left"?
+			// are we turning "right"?
 			// left = our P1, previous segment's P3
 			// right = our P0, previous segment's P2
-			left := false
+			right := false
 			if dt > math.Pi {
 				// our P1, previous segment's P3
 				dt -= math.Pi
-				left = true
+				right = true
 			}
 
 			sharp := math.Pi/2 - (math.Abs(dt - (math.Pi / 2)))
@@ -352,32 +354,29 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 				prevTheta = dt
 			}
 			// create bezel:
-			if left {
+			if right {
 				adjust(&v[1], lb.ux, lb.uy, scale*halfthick)
-				adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick)
 				if pl.glowing {
-					adjust(&v[7], lb.ux, lb.uy, scale*halfthick/2)
-					// undo half of the adjustment that was incorrect
-					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, +scale*halfthick/2)
+					adjust(&v[7], lb.ux, lb.uy, scale*halfthick*glowScale)
+					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick*glowScale)
 					adjust(&pl.vertices[offset-9], plb.ux, plb.uy, -scale*halfthick)
 					bezel[0] = offset - 1 - 6
 					bezel[1] = offset - 4 - 6
-					bezel[2] = offset - 6
+					bezel[2] = offset
 					bezel2[0] = offset - 1
 					bezel2[1] = offset - 4
-					bezel2[2] = offset
+					bezel2[2] = offset + 6
 				} else {
+					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick)
 					bezel[0] = offset - 1
 					bezel[1] = offset - 4
 					bezel[2] = offset
 				}
 			} else {
 				adjust(&v[0], lb.ux, lb.uy, scale*halfthick)
-				adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick)
 				if pl.glowing {
-					adjust(&v[6], lb.ux, lb.uy, scale*halfthick/2)
-					// undo half of the adjustment that was incorrect
-					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, +scale*halfthick/2)
+					adjust(&v[6], lb.ux, lb.uy, scale*halfthick*glowScale)
+					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick*glowScale)
 					adjust(&pl.vertices[offset-10], plb.ux, plb.uy, -scale*halfthick)
 					bezel[0] = offset - 1 - 6
 					bezel[1] = offset + 1
@@ -386,6 +385,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 					bezel2[1] = offset + 1 + 6
 					bezel2[2] = offset - 3
 				} else {
+					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick)
 					bezel[0] = offset - 1
 					bezel[1] = offset + 1
 					bezel[2] = offset - 3
