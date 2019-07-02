@@ -36,17 +36,14 @@ var (
 	screenHeight = 960
 )
 
-var lagCounter = 0
 var pause = false
 
-var km = keys.NewMap(ebiten.KeyQ, ebiten.KeySpace, ebiten.KeyLeft, ebiten.KeyRight, ebiten.KeyUp)
+var km = keys.NewMap(ebiten.KeyA, ebiten.KeyD, ebiten.KeyQ, ebiten.KeyS, ebiten.KeyW, ebiten.KeyPeriod, ebiten.KeySpace, ebiten.KeyLeft, ebiten.KeyRight, ebiten.KeyUp)
 
 var frames = 0
 var tps float64
 var tpsStarted bool
 var useSound = true
-var px, py int
-var prevLocs []g.ILoc
 
 func update(screen *ebiten.Image) error {
 	cTPS := ebiten.CurrentTPS()

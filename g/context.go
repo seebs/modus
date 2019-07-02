@@ -40,7 +40,8 @@ func (c *Context) NewSquareGrid(w int, r RenderType, p *Palette) *SquareGrid {
 
 // NewParticles returns a particle-emitter source.
 func (c *Context) NewParticles(w int, r RenderType, p *Palette) *Particles {
-	return newParticles(w, r, p, c.w, c.h)
+	scale, ox, oy, _, _ := c.Centered()
+	return newParticles(float32(c.w)/float32(w), r, p, scale, ox, oy)
 }
 
 // NewHexGrid returns a grid of hexes with width "w"

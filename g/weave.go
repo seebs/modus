@@ -164,3 +164,11 @@ func (k *Knot) apply() {
 	k.rawPoints[0].Skip = true
 	k.dirty = false
 }
+
+func (k *Knot) Affine() Affine {
+	aff := IdentityAffine()
+	aff.Scale(k.Size/2, k.Size/2)
+	aff.Rotate(k.Theta)
+	aff.Translate(k.X, k.Y)
+	return aff
+}

@@ -2,7 +2,9 @@ package modes
 
 import (
 	"fmt"
+	"math/rand"
 
+	math "github.com/chewxy/math32"
 	"github.com/hajimehoshi/ebiten"
 	"seebs.net/modus/g"
 	"seebs.net/modus/keys"
@@ -13,7 +15,7 @@ import (
 type vectorMode struct {
 	name        string
 	cycleTime   int // number of ticks to go by between updates
-	compute     func(*vectorScene) string
+	compute     func(*vectorScene, keys.Map) string
 	computeInit func(*vectorScene)
 }
 
@@ -48,13 +50,13 @@ type knotProto struct {
 var sampleKnots = map[string]knotProto{
 	"ship": knotProto{
 		pts: []g.LinePoint{
-			{X: 0, Y: -0.5},
-			{X: .25, Y: 0},
-			{X: 0.0, Y: 0.25},
-			{X: -.25, Y: 0},
-			{X: 0, Y: -0.5},
-			{X: -.125, Y: 0, Skip: true, P: 4},
-			{X: .125, Y: 0, P: 4},
+			{X: 0.5, Y: 0},
+			{X: 0, Y: .25},
+			{X: -0.25, Y: 0},
+			{X: 0, Y: -0.25},
+			{X: 0.5, Y: 0},
+			{X: 0, Y: .125, Skip: true, P: 3},
+			{X: 0, Y: -.125, P: 3},
 		},
 	},
 }
@@ -64,22 +66,42 @@ func simpleDemoInit(s *vectorScene) {
 	for i := 0; i < 4; i++ {
 		proto := sampleKnots["ship"]
 		k1 := s.wv.NewKnot(len(proto.pts))
-		b := bouncer{k: k1}
+		b := bouncer{k: k1, pOffset: i}
 		copy(k1.Points, proto.pts)
 		k1.Dirty()
 		k1.Size = float32(1.0) / float32(i+1)
 		k1.X, k1.Y = -0.5+float32(i&1), -0.5+float32(i>>1)
+		for j := range k1.Points {
+			k1.Points[j].P = s.palette.Inc(k1.Points[j].P, b.pOffset)
+		}
 		b.pt = g.MovingPoint{Loc: g.Point{X: k1.X, Y: k1.Y}, Velocity: g.Vec{X: -k1.X * .002 * (float32(i) + 1), Y: -k1.Y * .002 * (float32(i) + 1)}, Bounds: s.bounds}
 		s.bouncers = append(s.bouncers, b)
 	}
 }
 
-func simpleDemo(s *vectorScene) string {
+func simpleDemo(s *vectorScene, km keys.Map) string {
+	b := &s.bouncers[0]
+	if km.Down(ebiten.KeyW) {
+		sin, cos := math.Sincos(b.k.Theta)
+		b.pt.Velocity.X += cos * .0001
+		b.pt.Velocity.Y += sin * .0001
+		p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1))
+		p.Alpha = 0
+		p.Scale = rand.Float32()/4 + 0.125
+		p.X0, p.Y0 = b.pt.Loc.X-cos*.1, b.pt.Loc.Y-sin*.1
+		p.DX = b.pt.Velocity.X - (cos+(rand.Float32()-0.5))/8
+		p.DY = b.pt.Velocity.Y - (sin+(rand.Float32()-0.5))/8
+	}
+	if km.Down(ebiten.KeyA) {
+		b.k.Theta -= .05
+	}
+	if km.Down(ebiten.KeyD) {
+		b.k.Theta += 0.05
+	}
 	for idx := range s.bouncers {
 		b := &s.bouncers[idx]
 		b.pt.Update()
 		b.k.X, b.k.Y = b.pt.Loc.X, b.pt.Loc.Y
-		b.k.Theta = s.t0 / ((float32(idx) + 1) * 256)
 		b.k.Dirty()
 	}
 	return ""
@@ -90,6 +112,7 @@ type vectorScene struct {
 	gctx     *g.Context
 	mode     vectorMode
 	wv       *g.Weave
+	pt       *g.Particles
 	detail   int
 	cycle    int
 	t0       float32
@@ -98,8 +121,9 @@ type vectorScene struct {
 }
 
 type bouncer struct {
-	pt g.MovingPoint
-	k  *g.Knot
+	pt      g.MovingPoint
+	pOffset int
+	k       *g.Knot
 }
 
 func newVectorScene(m vectorMode, gctx *g.Context, detail int, p *g.Palette) (*vectorScene, error) {
@@ -132,7 +156,8 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *vectorScene) Display() error {
-	s.wv = s.gctx.NewWeave(16, s.palette)
+	s.wv = s.gctx.NewWeave(8, s.palette)
+	s.pt = s.gctx.NewParticles(32, 1, s.palette)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
 	}
@@ -141,6 +166,7 @@ func (s *vectorScene) Display() error {
 
 func (s *vectorScene) Hide() error {
 	s.wv = nil
+	s.pt = nil
 	return nil
 }
 
@@ -151,7 +177,8 @@ func (s *vectorScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		return false, nil
 	}
 	if s.mode.compute != nil {
-		s.wv.SetStatus(s.mode.compute(s))
+		s.wv.SetStatus(s.mode.compute(s, km))
+		s.pt.Tick()
 	}
 	return true, nil
 }
@@ -159,6 +186,7 @@ func (s *vectorScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 func (s *vectorScene) Draw(screen *ebiten.Image) error {
 	s.gctx.Render(screen, func(t *ebiten.Image, scale float32) {
 		s.wv.Draw(t, 1.0, scale)
+		s.pt.Draw(t, scale)
 	})
 	return nil
 }

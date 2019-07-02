@@ -41,6 +41,14 @@ func (km Map) Held(k ebiten.Key) bool {
 	return km.State(k) == HOLD
 }
 
+func (km Map) Down(k ebiten.Key) bool {
+	return (km.State(k) & PRESS) != 0
+}
+
+func (km Map) Up(k ebiten.Key) bool {
+	return (km.State(k) & PRESS) == 0
+}
+
 func (km Map) Update() {
 	for i := range km {
 		state := byte(0)

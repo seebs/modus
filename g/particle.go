@@ -8,20 +8,20 @@ import (
 )
 
 type Particles struct {
-	X, Y      float32
-	DX, DY    float32
-	Size      float32
-	sx, sy    int
-	r         RenderType
-	palette   *Palette
-	particles []*Particle
-	vertices  []ebiten.Vertex
-	indices   []uint16
-	status    string
+	X, Y                    float32
+	DX, DY                  float32
+	Size                    float32
+	r                       RenderType
+	palette                 *Palette
+	particles               []*Particle
+	vertices                []ebiten.Vertex
+	indices                 []uint16
+	status                  string
+	scale, offsetX, offsetY float32
 }
 
-func newParticles(w int, r RenderType, p *Palette, sx, sy int) *Particles {
-	return &Particles{Size: float32(sx) / float32(w), r: r, palette: p, sx: sx, sy: sy}
+func newParticles(size float32, r RenderType, p *Palette, scale, offsetX, offsetY float32) *Particles {
+	return &Particles{Size: size, r: r, palette: p, scale: scale, offsetX: offsetX, offsetY: offsetY}
 }
 
 func (ps *Particles) Add(anim ParticleAnimation, p Paint) *Particle {
@@ -62,7 +62,8 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 		vs := ps.vertices[offset : offset+4]
 		// scale is a multiplier on the base thickness/size of
 		// dots
-		x, y := ps.X+p.X0+(p.X*ps.Size), ps.Y+p.Y0+(p.Y*ps.Size)
+		x, y := ps.X+p.X0, ps.Y+p.Y0
+		x, y = (x*ps.scale)+ps.offsetX+(p.X*ps.Size), (y*ps.scale)+ps.offsetY+(p.Y*ps.Size)
 		size := thickness * p.Scale
 		vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 		vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
