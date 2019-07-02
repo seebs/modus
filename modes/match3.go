@@ -24,10 +24,8 @@ var match3Modes = []match3Mode{
 }
 
 func init() {
-	if false {
-		for _, mode := range match3Modes {
-			allModes = append([]Mode{mode}, allModes...)
-		}
+	for _, mode := range match3Modes {
+		allModes = append([]Mode{mode}, allModes...)
 	}
 }
 
@@ -40,7 +38,8 @@ func (m match3Mode) Description() string {
 }
 
 func (m match3Mode) New(gctx *g.Context, detail int, p *g.Palette) (Scene, error) {
-	return newMatch3Scene(m, gctx, detail, p)
+	scale, ox, oy, _, _ := gctx.Centered()
+	return newMatch3Scene(m, gctx, detail, p, scale, ox, oy)
 }
 
 type locCell struct {
@@ -48,27 +47,31 @@ type locCell struct {
 	*g.HexCell
 }
 type match3Scene struct {
-	nextMatch  g.Paint
-	matchCount int
-	fading     []locCell
-	erased     []locCell
-	moving     []locCell
-	matching   [][]bool
-	fallSpeed  float32
-	fadeDir    float32
-	palette    *g.Palette
-	gctx       *g.Context
-	detail     int
-	gr         *g.HexGrid
-	cycle      int
-	mode       match3Mode
-	explode    bool
-	splashy    *g.Particles
-	toneOffset int
+	nextMatch    g.Paint
+	matchCount   int
+	fading       []locCell
+	erased       []locCell
+	moving       []locCell
+	matching     [][]bool
+	fallSpeed    float32
+	fadeDir      float32
+	palette      *g.Palette
+	gctx         *g.Context
+	detail       int
+	gr           *g.HexGrid
+	cycle        int
+	mode         match3Mode
+	explode      bool
+	splashy      *g.Particles
+	toneOffset   int
+	particleShim g.Affine
 }
 
-func newMatch3Scene(m match3Mode, gctx *g.Context, detail int, p *g.Palette) (*match3Scene, error) {
+func newMatch3Scene(m match3Mode, gctx *g.Context, detail int, p *g.Palette, scale, offsetX, offsetY float32) (*match3Scene, error) {
 	sc := &match3Scene{mode: m, gctx: gctx, detail: detail, palette: p}
+	sc.particleShim = g.IdentityAffine()
+	sc.particleShim.Translate(-offsetX, -offsetY)
+	sc.particleShim.Scale(1/scale, 1/scale)
 	err := sc.Reset(detail, p)
 	if err != nil {
 		return nil, err
@@ -336,9 +339,9 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 				p.Alpha = 0
 				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
-				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
+				p.X0, p.Y0 = s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 				p.X = (rand.Float32() - 0.5) / 2
-				p.Y += (rand.Float32() - 0.5) / 2
+				p.Y = (rand.Float32() - 0.5) / 2
 				p.DX = (rand.Float32() - 0.5) / 4
 				p.DY = (rand.Float32() - 0.5) / 4
 			}
@@ -347,9 +350,9 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 				p.Alpha = 0
 				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
-				p.X0, p.Y0 = s.gr.CenterFor(c.ILoc.Y, c.ILoc.X)
+				p.X0, p.Y0 = s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 				p.X = (rand.Float32() - 0.5) / 2
-				p.Y += (rand.Float32() - 0.5) / 2
+				p.Y = (rand.Float32() - 0.5) / 2
 				p.DX = (rand.Float32() - 0.5) / 4
 				p.DY = (rand.Float32() - 0.5) / 4
 			}
