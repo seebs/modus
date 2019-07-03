@@ -29,24 +29,49 @@ func (km Map) State(k ebiten.Key) byte {
 	return km[k] & HOLD
 }
 
-func (km Map) Pressed(k ebiten.Key) bool {
-	return km.State(k) == PRESS
+func (km Map) Pressed(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k) == PRESS {
+			return true
+		}
+	}
+	return false
 }
 
-func (km Map) Released(k ebiten.Key) bool {
-	return km.State(k) == RELEASE
+func (km Map) Released(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k) == RELEASE {
+			return true
+		}
+	}
+	return false
 }
 
-func (km Map) Held(k ebiten.Key) bool {
-	return km.State(k) == HOLD
+func (km Map) Held(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k) == HOLD {
+			return true
+		}
+	}
+	return false
 }
 
-func (km Map) Down(k ebiten.Key) bool {
-	return (km.State(k) & PRESS) != 0
+func (km Map) Down(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k)&PRESS != 0 {
+			return true
+		}
+	}
+	return false
 }
 
-func (km Map) Up(k ebiten.Key) bool {
-	return (km.State(k) & PRESS) == 0
+func (km Map) Up(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k)&PRESS == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (km Map) Update() {

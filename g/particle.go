@@ -1,6 +1,8 @@
 package g
 
 import (
+	"fmt"
+
 	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
@@ -11,6 +13,8 @@ type Particles struct {
 	X, Y                    float32
 	DX, DY                  float32
 	Size                    float32
+	Theta                   float32
+	Alpha                   float32
 	r                       RenderType
 	palette                 *Palette
 	particles               []*Particle
@@ -50,6 +54,7 @@ func (ps *Particles) Tick() bool {
 		}
 	}
 	ps.particles = ps.particles[:j]
+	ps.X, ps.Y = ps.X+ps.DX, ps.Y+ps.DY
 	return len(ps.particles) == 0
 }
 
@@ -58,17 +63,44 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 	offset := 0
 	r := dotData.vsByR[ps.r]
 	thickness := ps.Size * dotData.scales[ps.r]
+	var psSin, psCos float32
+	if ps.Theta == 0 {
+		psCos = 1
+	} else {
+		psSin, psCos = math.Sincos(ps.Theta)
+	}
+	ps.status = fmt.Sprintf("\nparticles: centered on %g, %g", ps.X, ps.Y)
 	for _, p := range ps.particles {
 		vs := ps.vertices[offset : offset+4]
-		// scale is a multiplier on the base thickness/size of
-		// dots
-		x, y := ps.X+p.X0, ps.Y+p.Y0
-		x, y = (x*ps.scale)+ps.offsetX+(p.X*ps.Size), (y*ps.scale)+ps.offsetY+(p.Y*ps.Size)
+		// given a particle
+		x, y := ps.X+(p.X0*psCos-p.Y0*psSin), ps.Y+(p.X0*psSin+p.Y0*psCos)
+		x, y = (x*ps.scale)+ps.offsetX+((p.X*psCos-p.Y*psSin)*ps.Size), (y*ps.scale)+ps.offsetY+((p.X*psSin+p.Y*psCos)*ps.Size)
 		size := thickness * p.Scale
-		vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
-		vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
-		vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale
-		vs[3].DstX, vs[3].DstY = (x+size)*scale, (y+size)*scale
+		var sin, cos float32
+		if p.Theta == 0 {
+			cos = 1
+		} else {
+			sin, cos = math.Sincos(p.Theta)
+		}
+		sin, cos = sin*size, cos*size
+		// we want points which are rotated around x, y, and which
+		// correspond to +/- size pixels out, only rotated by sin/cos.
+		// Points:
+		// 0: -1, -1
+		// 1: 1, -1
+		// 2: -1, 1
+		// 3: 1, 1
+		// In each case, X' is (x*cos-y*sin), and Y' is (x*sin+y*cos)
+		// So that gives us:
+		// 0: -cos+sin, -sin-cos
+		// 1: +cos+sin, +sin-cos
+		// 2: -cos-sin, -sin+cos
+		// 3: +cos-sin, +sin+cos
+		// so 0/3 and 1/2 are opposites, which is unsurprising.
+		vs[0].DstX, vs[0].DstY = (x-cos+sin)*scale, (y-sin-cos)*scale
+		vs[1].DstX, vs[1].DstY = (x+cos+sin)*scale, (y+sin-cos)*scale
+		vs[2].DstX, vs[2].DstY = (x-cos-sin)*scale, (y-sin+cos)*scale
+		vs[3].DstX, vs[3].DstY = (x+cos-sin)*scale, (y+sin+cos)*scale
 		vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
 		vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
 		vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
@@ -88,6 +120,8 @@ type Particle struct {
 	P      Paint
 	Scale  float32
 	Alpha  float32
+	Theta  float32
+	DTheta float32
 	X, Y   float32 // relative to X0, Y0
 	X0, Y0 float32 // starting point
 	DX, DY float32
@@ -119,6 +153,7 @@ func (s Splasher) Tick(p *Particle) bool {
 	p.Y += p.DY
 	p.DX *= 0.95
 	p.DY *= 0.95
+	p.Theta += p.DTheta
 	p.Tick++
 	return false
 }
