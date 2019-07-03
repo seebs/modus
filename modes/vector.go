@@ -82,27 +82,31 @@ func simpleDemoInit(s *vectorScene) {
 func simpleDemo(s *vectorScene, km keys.Map) string {
 	b := &s.bouncers[0]
 	sin, cos := math.Sincos(b.k.Theta)
-	if km.Down(ebiten.KeyW, ebiten.KeyUp) {
-		b.pt.Velocity.X += cos * .0001
-		b.pt.Velocity.Y += sin * .0001
-		p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1))
-		p.Alpha = 0
-		p.Scale = rand.Float32()/4 + 0.125
-		p.X0, p.Y0 = -0.03, 0
-		p.DX = -(0.05 + (rand.Float32() / 8))
-		p.DY = (rand.Float32() - 0.5) / 8
-		if math.Abs(p.DY) > 0.05 {
-			p.P++
+	if s.keysReady {
+		if km.Down(ebiten.KeyW, ebiten.KeyUp) {
+			b.pt.Velocity.X += cos * .0001
+			b.pt.Velocity.Y += sin * .0001
+			p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1), -0.03, 0)
+			p.Alpha = 0
+			p.Scale = rand.Float32()/4 + 0.125
+			p.DX = -(0.05 + (rand.Float32() / 8))
+			p.DY = (rand.Float32() - 0.5) / 8
+			if math.Abs(p.DY) > 0.05 {
+				p.P++
+			}
+			p.DTheta = p.DY
 		}
-		p.DTheta = p.DY
+		if km.Down(ebiten.KeyA, ebiten.KeyLeft) {
+			b.k.Theta -= .05
+		}
+		if km.Down(ebiten.KeyD, ebiten.KeyRight) {
+			b.k.Theta += 0.05
+		}
+	} else {
+		if km.AllUp(ebiten.KeyW, ebiten.KeyUp, ebiten.KeyA, ebiten.KeyLeft, ebiten.KeyD, ebiten.KeyRight) {
+			s.keysReady = true
+		}
 	}
-	if km.Down(ebiten.KeyA, ebiten.KeyLeft) {
-		b.k.Theta -= .05
-	}
-	if km.Down(ebiten.KeyD, ebiten.KeyRight) {
-		b.k.Theta += 0.05
-	}
-	// s.pt.Theta += .01
 	s.pt.X, s.pt.Y = b.pt.Loc.X-cos*.1, b.pt.Loc.Y-sin*.1
 	s.pt.Theta = b.k.Theta
 	for idx := range s.bouncers {
@@ -115,16 +119,17 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 }
 
 type vectorScene struct {
-	palette  *g.Palette
-	gctx     *g.Context
-	mode     vectorMode
-	wv       *g.Weave
-	pt       *g.Particles
-	detail   int
-	cycle    int
-	t0       float32
-	bouncers []bouncer
-	bounds   g.Region
+	palette   *g.Palette
+	gctx      *g.Context
+	mode      vectorMode
+	wv        *g.Weave
+	pt        *g.Particles
+	detail    int
+	cycle     int
+	t0        float32
+	bouncers  []bouncer
+	bounds    g.Region
+	keysReady bool
 }
 
 type bouncer struct {

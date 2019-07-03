@@ -65,6 +65,15 @@ func (km Map) Down(ks ...ebiten.Key) bool {
 	return false
 }
 
+func (km Map) AllDown(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k)&PRESS == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (km Map) Up(ks ...ebiten.Key) bool {
 	for _, k := range ks {
 		if km.State(k)&PRESS == 0 {
@@ -72,6 +81,15 @@ func (km Map) Up(ks ...ebiten.Key) bool {
 		}
 	}
 	return false
+}
+
+func (km Map) AllUp(ks ...ebiten.Key) bool {
+	for _, k := range ks {
+		if km.State(k)&PRESS != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (km Map) Update() {

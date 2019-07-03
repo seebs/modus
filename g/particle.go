@@ -28,8 +28,12 @@ func newParticles(size float32, r RenderType, p *Palette, scale, offsetX, offset
 	return &Particles{Size: size, r: r, palette: p, scale: scale, offsetX: offsetX, offsetY: offsetY}
 }
 
-func (ps *Particles) Add(anim ParticleAnimation, p Paint) *Particle {
+func (ps *Particles) Add(anim ParticleAnimation, p Paint, X0, Y0 float32) *Particle {
 	np := &Particle{Anim: anim, P: p, Scale: 1.0, Alpha: 1.0, X: 0, Y: 0, DX: 0, DY: 0, Tick: 0}
+	np.psSin, np.psCos = math.Sincos(ps.Theta)
+	np.psTheta = ps.Theta
+	np.x0 = ((ps.X + (X0*np.psCos - Y0*np.psSin)) * ps.scale) + ps.offsetX
+	np.y0 = ((ps.Y + (X0*np.psSin + Y0*np.psCos)) * ps.scale) + ps.offsetY
 	ps.particles = append(ps.particles, np)
 	offset := uint16(len(ps.vertices))
 	ps.vertices = append(ps.vertices, dotData.vsByR[ps.r]...)
@@ -63,24 +67,16 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 	offset := 0
 	r := dotData.vsByR[ps.r]
 	thickness := ps.Size * dotData.scales[ps.r]
-	var psSin, psCos float32
-	if ps.Theta == 0 {
-		psCos = 1
-	} else {
-		psSin, psCos = math.Sincos(ps.Theta)
-	}
 	ps.status = fmt.Sprintf("\nparticles: centered on %g, %g", ps.X, ps.Y)
 	for _, p := range ps.particles {
 		vs := ps.vertices[offset : offset+4]
-		// given a particle
-		x, y := ps.X+(p.X0*psCos-p.Y0*psSin), ps.Y+(p.X0*psSin+p.Y0*psCos)
-		x, y = (x*ps.scale)+ps.offsetX+((p.X*psCos-p.Y*psSin)*ps.Size), (y*ps.scale)+ps.offsetY+((p.X*psSin+p.Y*psCos)*ps.Size)
+		x, y := p.x0+((p.X*p.psCos-p.Y*p.psSin)*ps.Size), p.y0+((p.X*p.psSin+p.Y*p.psCos)*ps.Size)
 		size := thickness * p.Scale
 		var sin, cos float32
-		if p.Theta == 0 {
+		if p.Theta+p.psTheta == 0 {
 			cos = 1
 		} else {
-			sin, cos = math.Sincos(p.Theta)
+			sin, cos = math.Sincos(p.Theta + p.psTheta)
 		}
 		sin, cos = sin*size, cos*size
 		// we want points which are rotated around x, y, and which
@@ -117,17 +113,19 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 }
 
 type Particle struct {
-	P      Paint
-	Scale  float32
-	Alpha  float32
-	Theta  float32
-	DTheta float32
-	X, Y   float32 // relative to X0, Y0
-	X0, Y0 float32 // starting point
-	DX, DY float32
-	Tick   int
-	Delay  int
-	Anim   ParticleAnimation
+	P            Paint
+	Scale        float32
+	Alpha        float32
+	Theta        float32
+	DTheta       float32
+	X, Y         float32 // relative to X0, Y0
+	x0, y0       float32 // starting point
+	psSin, psCos float32 // particle system's sin/cos when we were emitted
+	psTheta      float32 // particle system's theta when we were emittted
+	DX, DY       float32
+	Tick         int
+	Delay        int
+	Anim         ParticleAnimation
 }
 
 type ParticleAnimation interface {

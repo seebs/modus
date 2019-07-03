@@ -333,24 +333,23 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		}
 		s.splashy = s.gctx.NewParticles(s.gr.Width*4, 1, s.palette)
 		for _, c := range s.fading {
+			x0, y0 := s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 			// add a particle animation for each c
 			for i := 0; i < 5; i++ {
-				p := s.splashy.Add(g.SecondSplasher, c.P)
+				p := s.splashy.Add(g.SecondSplasher, c.P, x0, y0)
 				p.Alpha = 0
 				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
-				p.X0, p.Y0 = s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 				p.X = (rand.Float32() - 0.5) / 2
 				p.Y = (rand.Float32() - 0.5) / 2
 				p.DX = (rand.Float32() - 0.5) / 4
 				p.DY = (rand.Float32() - 0.5) / 4
 			}
 			for i := 0; i < 3; i++ {
-				p := s.splashy.Add(g.SecondSplasher, c.P+g.Paint(rand.Int31n(5))+1)
+				p := s.splashy.Add(g.SecondSplasher, c.P+g.Paint(rand.Int31n(5))+1, x0, y0)
 				p.Alpha = 0
 				p.Scale = rand.Float32()/2 + 0.5
 				p.Delay = int(rand.Int31n(6))
-				p.X0, p.Y0 = s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 				p.X = (rand.Float32() - 0.5) / 2
 				p.Y = (rand.Float32() - 0.5) / 2
 				p.DX = (rand.Float32() - 0.5) / 4
