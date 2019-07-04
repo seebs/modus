@@ -21,6 +21,8 @@ type vectorMode struct {
 
 const vectorCycleTime = 1
 
+const shieldSegments = 20
+
 var vectorModes = []vectorMode{
 	{name: "Test", cycleTime: vectorCycleTime, compute: simpleDemo, computeInit: simpleDemoInit},
 }
@@ -61,12 +63,54 @@ var sampleKnots = map[string]knotProto{
 	},
 }
 
+type polarPos struct{ x, y, theta float32 }
+
+var shieldPositions []polarPos
+var shieldSegmentLen float32
+
+func (b *bouncer) setShield() {
+	for i := 0; i < shieldSegments; i++ {
+		var s, c float32
+		x, y, theta := shieldPositions[i].x, shieldPositions[i].y, shieldPositions[i].theta
+		if i%2 == 0 {
+			s, c = math.Sincos(theta + b.shieldSpin)
+		} else {
+			s, c = math.Sincos(theta - b.shieldSpin)
+		}
+		s, c = s*shieldSegmentLen/2, c*shieldSegmentLen/2
+		b.shield.Points[i*2].X, b.shield.Points[i*2].Y = x+c, y+s
+		b.shield.Points[i*2+1].X, b.shield.Points[i*2+1].Y = x-c, y-s
+		b.shield.Points[i*2].P = (b.shield.Points[i*2].P + 5) % 6
+		b.shield.Points[i*2+1].P = (b.shield.Points[i*2].P + 1) % 6
+	}
+}
+
+func (b *bouncer) initShield() {
+	for i := 0; i < shieldSegments; i++ {
+		b.shield.Points[i*2].Skip = true
+		b.shield.Points[i*2].P = 1
+		b.shield.Points[i*2+1].P = 4
+	}
+}
+
 // simpleDemo is just a trivial test case
 func simpleDemoInit(s *vectorScene) {
+	shieldSegmentLen = (math.Pi * 2) / shieldSegments
+	for i := 0; i < shieldSegments; i++ {
+		theta := shieldSegmentLen * float32(i)
+		pp := polarPos{theta: theta + math.Pi/2}
+		pp.y, pp.x = math.Sincos(theta)
+		shieldPositions = append(shieldPositions, pp)
+	}
 	for i := 0; i < 1; i++ {
 		proto := sampleKnots["ship"]
 		k1 := s.wv.NewKnot(len(proto.pts))
-		b := bouncer{k: k1, pOffset: i}
+		b := bouncer{ship: k1, pOffset: i}
+		b.shield = s.wv.NewKnot(shieldSegments * 2)
+		b.shield.Size = 0.6
+		b.initShield()
+		b.setShield()
+		fmt.Printf("shield points: %v, %v\n", b.shield.Points[0], b.shield.Points[1])
 		copy(k1.Points, proto.pts)
 		k1.Dirty()
 		k1.Size = float32(1.0) / float32(i+1)
@@ -81,7 +125,7 @@ func simpleDemoInit(s *vectorScene) {
 
 func simpleDemo(s *vectorScene, km keys.Map) string {
 	b := &s.bouncers[0]
-	sin, cos := math.Sincos(b.k.Theta)
+	sin, cos := math.Sincos(b.ship.Theta)
 	if s.keysReady {
 		if km.Down(ebiten.KeyW, ebiten.KeyUp) {
 			b.pt.Velocity.X += cos * .0001
@@ -100,10 +144,10 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 			p.DTheta = p.DY * 2
 		}
 		if km.Down(ebiten.KeyA, ebiten.KeyLeft) {
-			b.k.Theta -= .05
+			b.ship.Theta -= .05
 		}
 		if km.Down(ebiten.KeyD, ebiten.KeyRight) {
-			b.k.Theta += 0.05
+			b.ship.Theta += 0.05
 		}
 	} else {
 		if km.AllUp(ebiten.KeyW, ebiten.KeyUp, ebiten.KeyA, ebiten.KeyLeft, ebiten.KeyD, ebiten.KeyRight) {
@@ -111,12 +155,16 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 		}
 	}
 	s.pt.X, s.pt.Y = b.pt.Loc.X-cos*.1, b.pt.Loc.Y-sin*.1
-	s.pt.Theta = b.k.Theta
+	s.pt.Theta = b.ship.Theta
 	for idx := range s.bouncers {
 		b := &s.bouncers[idx]
+		b.shieldSpin += .1
 		b.pt.Update()
-		b.k.X, b.k.Y = b.pt.Loc.X, b.pt.Loc.Y
-		b.k.Dirty()
+		b.ship.X, b.ship.Y = b.pt.Loc.X, b.pt.Loc.Y
+		b.shield.X, b.shield.Y = b.pt.Loc.X+cos*.1, b.pt.Loc.Y+sin*.1
+		b.ship.Dirty()
+		b.setShield()
+		b.shield.Dirty()
 	}
 	return ""
 }
@@ -136,9 +184,11 @@ type vectorScene struct {
 }
 
 type bouncer struct {
-	pt      g.MovingPoint
-	pOffset int
-	k       *g.Knot
+	pt         g.MovingPoint
+	pOffset    int
+	ship       *g.Knot
+	shield     *g.Knot
+	shieldSpin float32
 }
 
 func newVectorScene(m vectorMode, gctx *g.Context, detail int, p *g.Palette) (*vectorScene, error) {
