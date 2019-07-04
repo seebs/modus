@@ -156,9 +156,8 @@ func (k *Knot) apply() {
 	aff.Rotate(k.Theta)
 	aff.Translate(k.X, k.Y)
 	for i := range k.Points {
+		k.rawPoints[i] = k.Points[i]
 		k.rawPoints[i].X, k.rawPoints[i].Y = aff.Project(k.Points[i].X, k.Points[i].Y)
-		k.rawPoints[i].P = k.Points[i].P
-		k.rawPoints[i].Skip = k.Points[i].Skip
 	}
 	// we never draw a line to the starting point of the thing.
 	k.rawPoints[0].Skip = true

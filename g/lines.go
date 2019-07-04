@@ -40,10 +40,9 @@ type PolyLine struct {
 // A LinePoint is one point in a PolyLine, containing both
 // a location and a Paint corresponding to the PolyLine's Palette.
 type LinePoint struct {
-	X, Y float32
-	P    Paint
-	Skip bool
-	Glow bool // unimplemented
+	X, Y              float32
+	P                 Paint
+	Skip, Open, Close bool
 }
 
 var (
@@ -98,15 +97,20 @@ func (pl *PolyLine) SetStatus(status string) {
 	pl.status = status
 }
 
-type LineBits struct {
-	dx, dy float32 // delta x, delta y
-	ux, uy float32 // unit x/y: x/y adjusted to a length of 1
-	l      float32 // length
-	nx, ny float32 // normal vector, normalized to unit length
-	theta  float32 // angle, if applicable
+type lineBits struct {
+	vs     []ebiten.Vertex
+	idxs   []uint16 // corresponding to this segment
+	offset uint16   // the offset into the parent vertexes of vs
+	x, y   float32  // the "new" x and y for this line segment/point
+	dx, dy float32  // delta x, delta y
+	ux, uy float32  // unit x/y: x/y adjusted to a length of 1
+	l      float32  // length
+	nx, ny float32  // normal vector, normalized to unit length
+	theta  float32  // angle, if applicable
 }
 
-func linebits(x0, y0, x1, y1 float32) (lb LineBits) {
+func linebits(x0, y0, x1, y1 float32) (lb lineBits) {
+	lb.x, lb.y = x1, y1
 	lb.dx, lb.dy = x1-x0, y1-y0
 	lb.l = math.Sqrt(lb.dx*lb.dx + lb.dy*lb.dy)
 	if lb.l == 0 {
@@ -150,9 +154,6 @@ func linebits(x0, y0, x1, y1 float32) (lb LineBits) {
 // segment, and halfthick distance out from the line segment. So, for a
 // precise right angle, the point is the original location it would have
 // had, plus halfthick * the direction of the line segment.
-//
-//
-var prevTheta float32
 
 // please inline me
 func adjust(v *ebiten.Vertex, ux, uy, scale float32) {
@@ -213,7 +214,9 @@ func populateJoinedRGB(v []ebiten.Vertex, r0, g0, b0, r1, g1, b1, alpha float32)
 	v[5].ColorR, v[5].ColorG, v[5].ColorB, v[5].ColorA = r1, g1, b1, alpha
 }
 
-func populateJoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb LineBits, halfthick, scale float32) {
+func populateJoinedVs(lb lineBits, px, py, halfthick, scale float32) {
+	v := lb.vs
+	nx, ny := lb.x, lb.y
 	v[0].DstX = float32(px+lb.nx*halfthick) * scale
 	v[0].DstY = float32(py+lb.ny*halfthick) * scale
 	v[1].DstX = float32(px-lb.nx*halfthick) * scale
@@ -239,7 +242,95 @@ func populateJoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb LineBits, ha
 	}
 }
 
+// joinVertices does the fancy join operation between two line segments.
+func joinVertices(nlb, plb lineBits, glowing bool, halfthick float32) {
+	// fix up the overlap between these lines
+	theta := nlb.theta
+	if theta < plb.theta {
+		theta += math.Pi * 2
+	}
+	dt := theta - plb.theta
+	// are we turning "right"?
+	// left = our P1, previous segment's P3
+	// right = our P0, previous segment's P2
+	right := false
+	if dt > math.Pi {
+		// our P1, previous segment's P3
+		dt -= math.Pi
+		right = true
+	}
+
+	sharp := math.Pi/2 - (math.Abs(dt - (math.Pi / 2)))
+	scale := math.Tan(sharp / 2)
+	vsLen := uint16(len(plb.vs))
+	idxLen := len(plb.idxs)
+	var bezel, bezel2 []uint16
+	if glowing {
+		bezel = plb.idxs[idxLen-15-3 : idxLen-15]
+		bezel2 = plb.idxs[idxLen-3:]
+	} else {
+		bezel = plb.idxs[idxLen-3:]
+	}
+	// create bezel:
+	if right {
+		adjust(&nlb.vs[1], nlb.ux, nlb.uy, scale*halfthick)
+		if glowing {
+			adjust(&nlb.vs[7], nlb.ux, nlb.uy, scale*halfthick*glowScale)
+			adjust(&plb.vs[vsLen-3], plb.ux, plb.uy, -scale*halfthick*glowScale)
+			adjust(&plb.vs[vsLen-9], plb.ux, plb.uy, -scale*halfthick)
+			bezel[0] = plb.offset + vsLen - 1 - 6
+			bezel[1] = plb.offset + vsLen - 4 - 6
+			bezel[2] = nlb.offset
+			bezel2[0] = plb.offset + vsLen - 1
+			bezel2[1] = plb.offset + vsLen - 4
+			bezel2[2] = nlb.offset + 6
+		} else {
+			adjust(&plb.vs[vsLen-3], plb.ux, plb.uy, -scale*halfthick)
+			bezel[0] = plb.offset + vsLen - 1
+			bezel[1] = plb.offset - vsLen - 4
+			bezel[2] = nlb.offset
+		}
+	} else {
+		adjust(&nlb.vs[0], nlb.ux, nlb.uy, scale*halfthick)
+		if glowing {
+			adjust(&nlb.vs[6], nlb.ux, nlb.uy, scale*halfthick*glowScale)
+			adjust(&plb.vs[vsLen-4], plb.ux, plb.uy, -scale*halfthick*glowScale)
+			adjust(&plb.vs[vsLen-10], plb.ux, plb.uy, -scale*halfthick)
+			bezel[0] = plb.offset + vsLen - 1 - 6
+			bezel[1] = nlb.offset + 1
+			bezel[2] = plb.offset + vsLen - 3 - 6
+			bezel2[0] = plb.offset + vsLen - 1
+			bezel2[1] = nlb.offset + 1 + 6
+			bezel2[2] = plb.offset + vsLen - 3
+		} else {
+			adjust(&plb.vs[vsLen-4], plb.ux, plb.uy, -scale*halfthick)
+			bezel[0] = plb.offset + vsLen - 1
+			bezel[1] = nlb.offset + 1
+			bezel[2] = plb.offset + vsLen - 3
+		}
+	}
+}
+
+func (lb *lineBits) zeroBezel(glowing bool) {
+	var bezel, bezel2 []uint16
+	idxLen := len(lb.idxs)
+	if glowing {
+		bezel = lb.idxs[idxLen-15-3 : idxLen-15]
+		bezel2 = lb.idxs[idxLen-3:]
+		bezel2[0], bezel2[1], bezel2[2] = 0, 0, 0
+	} else {
+		bezel = lb.idxs[idxLen-3:]
+	}
+	bezel[0], bezel[1], bezel[2] = 0, 0, 0
+}
+
+func (lb lineBits) String() string {
+	return fmt.Sprintf("[offset %d, theta %g, x/y %g,%g]", lb.offset, lb.theta, lb.x, lb.y)
+}
+
 func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vertices, indices int) {
+	// doesn't really matter how big it is...
+	lbStack := make([]lineBits, 0, 2)
 	segments := len(pl.Points) - 1
 	if segments < 1 {
 		// fail
@@ -284,123 +375,75 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 		pl.debug.Reset()
 	}
 	// Joined: We will draw one segment for each point past the first.
-	var plb LineBits
-	px, py := (prev.X*pl.scale)+pl.offsetX, (prev.Y*pl.scale)+pl.offsetY
-	for idx, next := range pl.Points[1:] {
-		nx, ny := (next.X*pl.scale)+pl.offsetX, (next.Y*pl.scale)+pl.offsetY
+	var plb, nlb lineBits
+	plb.x, plb.y = (prev.X*pl.scale)+pl.offsetX, (prev.Y*pl.scale)+pl.offsetY
+	for _, next := range pl.Points[1:] {
+		nlb.x, nlb.y = (next.X*pl.scale)+pl.offsetX, (next.Y*pl.scale)+pl.offsetY
 		if next.Skip {
 			// update things so the next point is the new previous point
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)
 			// we didn't compute the LineBits, but we want to act
 			// as though this one had length zero
+			plb = nlb
 			plb.l = 0
-			px, py = nx, ny
+			plb.vs = nil
 			// NOTE: This does not "fix up" a previous line's
 			// end points, which would normally be done while
 			// processing this line. That's probably correct
 			// when this line isn't drawn.
 			continue
 		}
+		nlb = linebits(plb.x, plb.y, nlb.x, nlb.y)
+		nlb.offset = uint16(count * vsPerSegment)
+		nlb.vs = pl.vertices[nlb.offset : nlb.offset+uint16(vsPerSegment)]
+		nlb.idxs = pl.indices[count*idxsPerSegment : (count+1)*idxsPerSegment]
 		// compute normal x/y values, scaled to unit length
-		lb := linebits(prev.X, prev.Y, next.X, next.Y)
-		if lb.l == 0 {
+		if nlb.l == 0 {
 			// avoid division by zero
 			// update things so the next point is the new previous point
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)
-			plb = lb
-			px, py = nx, ny
+			// zero out the bezel triangle from the previous batch
+			plb.zeroBezel(pl.glowing)
+			plb = nlb
 			// NOTE: This does not "fix up" a previous line's
 			// end points, which would normally be done while
 			// processing this line. That's probably correct
 			// when this line isn't drawn.
 			continue
 		}
-		var bezel, bezel2 []uint16
-		bezel = pl.indices[count*idxsPerSegment+12 : count*idxsPerSegment+15]
-		// make it a degenerate triangle so it gets ignored unless we use it later
-		bezel[0], bezel[1], bezel[2] = 0, 0, 0
-		if pl.glowing {
-			bezel2 = pl.indices[count*idxsPerSegment+27 : count*idxsPerSegment+30]
-			bezel2[0], bezel2[1], bezel2[2] = 0, 0, 0
+		// the Open goes on the starting point of the segment that will
+		// later be closed, but we want to use that segment's lineBits
+		// for it.
+		if prev.Open {
+			lbStack = append(lbStack, nlb)
 		}
 		r1, g1, b1, _ := pl.Palette.Float32(next.P)
-		offset := uint16(count * vsPerSegment)
-		v := pl.vertices[offset : offset+uint16(vsPerSegment)]
 		// populate these with default values, which we'd use without the fancy algorithm
-		populateJoinedVs(v, px, py, nx, ny, lb, halfthick, scale)
+		populateJoinedVs(nlb, plb.x, plb.y, halfthick, scale)
 
 		if plb.l > 0 {
-			// fix up the overlap between these lines
-			theta := lb.theta
-			if theta < plb.theta {
-				theta += math.Pi * 2
-			}
-			dt := theta - plb.theta
-			// are we turning "right"?
-			// left = our P1, previous segment's P3
-			// right = our P0, previous segment's P2
-			right := false
-			if dt > math.Pi {
-				// our P1, previous segment's P3
-				dt -= math.Pi
-				right = true
-			}
-
-			sharp := math.Pi/2 - (math.Abs(dt - (math.Pi / 2)))
-			scale := math.Tan(sharp / 2)
-			if idx == 1 && dt != prevTheta {
-				prevTheta = dt
-			}
-			// create bezel:
-			if right {
-				adjust(&v[1], lb.ux, lb.uy, scale*halfthick)
-				if pl.glowing {
-					adjust(&v[7], lb.ux, lb.uy, scale*halfthick*glowScale)
-					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick*glowScale)
-					adjust(&pl.vertices[offset-9], plb.ux, plb.uy, -scale*halfthick)
-					bezel[0] = offset - 1 - 6
-					bezel[1] = offset - 4 - 6
-					bezel[2] = offset
-					bezel2[0] = offset - 1
-					bezel2[1] = offset - 4
-					bezel2[2] = offset + 6
-				} else {
-					adjust(&pl.vertices[offset-3], plb.ux, plb.uy, -scale*halfthick)
-					bezel[0] = offset - 1
-					bezel[1] = offset - 4
-					bezel[2] = offset
-				}
-			} else {
-				adjust(&v[0], lb.ux, lb.uy, scale*halfthick)
-				if pl.glowing {
-					adjust(&v[6], lb.ux, lb.uy, scale*halfthick*glowScale)
-					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick*glowScale)
-					adjust(&pl.vertices[offset-10], plb.ux, plb.uy, -scale*halfthick)
-					bezel[0] = offset - 1 - 6
-					bezel[1] = offset + 1
-					bezel[2] = offset - 3 - 6
-					bezel2[0] = offset - 1
-					bezel2[1] = offset + 1 + 6
-					bezel2[2] = offset - 3
-				} else {
-					adjust(&pl.vertices[offset-4], plb.ux, plb.uy, -scale*halfthick)
-					bezel[0] = offset - 1
-					bezel[1] = offset + 1
-					bezel[2] = offset - 3
-				}
-			}
+			joinVertices(nlb, plb, pl.glowing, halfthick)
 		}
 		if pl.Blend {
-			populateJoinedRGB(v, r0, g0, b0, r1, g1, b1, alpha)
+			populateJoinedRGB(nlb.vs, r0, g0, b0, r1, g1, b1, alpha)
 		} else {
-			populateJoinedRGB(v, r1, g1, b1, r1, g1, b1, alpha)
+			populateJoinedRGB(nlb.vs, r1, g1, b1, r1, g1, b1, alpha)
 		}
 
 		if pl.DebugColor {
 			for i := 0; i < 6; i++ {
-				v[i].ColorR, v[i].ColorG, v[i].ColorB, v[i].ColorA = debugColors[i][0], debugColors[i][1], debugColors[i][2], 1.0
+				nlb.vs[i].ColorR, nlb.vs[i].ColorG, nlb.vs[i].ColorB, nlb.vs[i].ColorA = debugColors[i][0], debugColors[i][1], debugColors[i][2], 1.0
+			}
+		}
+		if next.Close {
+			l := len(lbStack)
+			if l > 0 {
+				lb := lbStack[l-1]
+				lbStack = lbStack[:l-1]
+				// try to close that off
+				joinVertices(lb, nlb, pl.glowing, halfthick)
 			}
 		}
 
@@ -408,8 +451,7 @@ func (pl *PolyLine) computeJoinedVertices(halfthick, alpha, scale float32) (vert
 		r0, g0, b0 = r1, g1, b1
 		// rotate points
 		prev = next
-		plb = lb
-		px, py = nx, ny
+		plb = nlb
 		// bump count since we drew a segment
 		count++
 	}
@@ -430,7 +472,7 @@ func populateUnjoinedRGB(v []ebiten.Vertex, r0, g0, b0, r1, g1, b1, alpha float3
 	v[3].ColorR, v[3].ColorG, v[3].ColorB, v[3].ColorA = r1, g1, b1, alpha
 }
 
-func populateUnjoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb LineBits, halfthick, scale float32) {
+func populateUnjoinedVs(v []ebiten.Vertex, px, py, nx, ny float32, lb lineBits, halfthick, scale float32) {
 	v[0].DstX = float32(px+lb.nx*halfthick) * scale
 	v[0].DstY = float32(py+lb.ny*halfthick) * scale
 	v[1].DstX = float32(px-lb.nx*halfthick) * scale
@@ -496,6 +538,7 @@ func (pl *PolyLine) computeUnjoinedVertices(halfthick, alpha, scale float32) (ve
 	px, py := (prev.X*pl.scale)+pl.offsetX, (prev.Y*pl.scale)+pl.offsetY
 	for idx, next := range pl.Points[1:] {
 		nx, ny := (next.X*pl.scale)+pl.offsetX, (next.Y*pl.scale)+pl.offsetY
+		// note: for unjoined lines, we don't actually care about open/close
 		if next.Skip {
 			prev = next
 			r0, g0, b0, _ = pl.Palette.Float32(next.P)

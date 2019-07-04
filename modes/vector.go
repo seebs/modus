@@ -50,11 +50,11 @@ type knotProto struct {
 var sampleKnots = map[string]knotProto{
 	"ship": knotProto{
 		pts: []g.LinePoint{
-			{X: 0.5, Y: 0},
+			{X: 0.5, Y: 0, Open: true},
 			{X: 0, Y: .25},
 			{X: -0.25, Y: 0},
 			{X: 0, Y: -0.25},
-			{X: 0.5, Y: 0},
+			{X: 0.5, Y: 0, Close: true},
 			{X: 0, Y: .125, Skip: true, P: 3},
 			{X: 0, Y: -.125, P: 3},
 		},
@@ -63,7 +63,7 @@ var sampleKnots = map[string]knotProto{
 
 // simpleDemo is just a trivial test case
 func simpleDemoInit(s *vectorScene) {
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 1; i++ {
 		proto := sampleKnots["ship"]
 		k1 := s.wv.NewKnot(len(proto.pts))
 		b := bouncer{k: k1, pOffset: i}
