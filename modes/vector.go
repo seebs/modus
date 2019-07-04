@@ -86,15 +86,18 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 		if km.Down(ebiten.KeyW, ebiten.KeyUp) {
 			b.pt.Velocity.X += cos * .0001
 			b.pt.Velocity.Y += sin * .0001
-			p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1), -0.03, 0)
+			p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1), -0.01, 0)
 			p.Alpha = 0
-			p.Scale = rand.Float32()/4 + 0.125
-			p.DX = -(0.05 + (rand.Float32() / 8))
+			p.Scale = rand.Float32()/16 + 0.125
+			p.DX = -(0.0625 + (rand.Float32() / 8))
 			p.DY = (rand.Float32() - 0.5) / 8
 			if math.Abs(p.DY) > 0.05 {
+				p.P--
+			}
+			if math.Abs(p.DY) < 0.01 {
 				p.P++
 			}
-			p.DTheta = p.DY
+			p.DTheta = p.DY * 2
 		}
 		if km.Down(ebiten.KeyA, ebiten.KeyLeft) {
 			b.k.Theta -= .05
