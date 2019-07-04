@@ -21,7 +21,9 @@ type vectorMode struct {
 
 const vectorCycleTime = 1
 
-const shieldSegments = 20
+const shieldSegments = 30
+
+const weaveInterpolate = 3
 
 var vectorModes = []vectorMode{
 	{name: "Test", cycleTime: vectorCycleTime, compute: simpleDemo, computeInit: simpleDemoInit},
@@ -57,8 +59,8 @@ var sampleKnots = map[string]knotProto{
 			{X: -0.25, Y: 0},
 			{X: 0, Y: -0.25},
 			{X: 0.5, Y: 0, Close: true},
-			{X: 0, Y: .125, Skip: true, P: 3},
-			{X: 0, Y: -.125, P: 3},
+			{X: 0, Y: .125, Skip: true, P: 9},
+			{X: 0, Y: -.125, P: 12},
 		},
 	},
 }
@@ -80,16 +82,16 @@ func (b *bouncer) setShield() {
 		s, c = s*shieldSegmentLen/2, c*shieldSegmentLen/2
 		b.shield.Points[i*2].X, b.shield.Points[i*2].Y = x+c, y+s
 		b.shield.Points[i*2+1].X, b.shield.Points[i*2+1].Y = x-c, y-s
-		b.shield.Points[i*2].P = (b.shield.Points[i*2].P + 5) % 6
-		b.shield.Points[i*2+1].P = (b.shield.Points[i*2].P + 1) % 6
+		b.shield.Points[i*2].P = (b.shield.Points[i*2].P + 1) % (6 * weaveInterpolate)
+		b.shield.Points[i*2+1].P = (b.shield.Points[i*2+1].P + 1) % (6 * weaveInterpolate)
 	}
 }
 
 func (b *bouncer) initShield() {
 	for i := 0; i < shieldSegments; i++ {
 		b.shield.Points[i*2].Skip = true
-		b.shield.Points[i*2].P = 1
-		b.shield.Points[i*2+1].P = 4
+		b.shield.Points[i*2].P = g.Paint(i*weaveInterpolate) % (6 * weaveInterpolate)
+		b.shield.Points[i*2+1].P = g.Paint(i*weaveInterpolate+3) % (6 * weaveInterpolate)
 	}
 }
 
@@ -136,10 +138,17 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 			p.DX = -(0.0625 + (rand.Float32() / 8))
 			p.DY = (rand.Float32() - 0.5) / 8
 			if math.Abs(p.DY) > 0.05 {
-				p.P--
+				awayFrom05 := math.Abs(p.DY) - 0.05
+				// gets us a range of about 0 to 0.0125, which we want to convert to about 1 palette's
+				// worth of shift
+				p.P = s.palette.Inc(p.P, -int(awayFrom05*80*weaveInterpolate))
 			}
 			if math.Abs(p.DY) < 0.01 {
-				p.P++
+				// exactly 0.01: we get 0.01
+				// exactly 0: we get 0.02
+				// multiplying by 75 gets us a range from .75 to 1.5, so "around 1" palette's worth of shift
+				awayFrom01 := 0.02 - math.Abs(p.DY)
+				p.P = s.palette.Inc(p.P, int(awayFrom01*100*weaveInterpolate))
 			}
 			p.DTheta = p.DY * 2
 		}
@@ -192,7 +201,7 @@ type bouncer struct {
 }
 
 func newVectorScene(m vectorMode, gctx *g.Context, detail int, p *g.Palette) (*vectorScene, error) {
-	sc := &vectorScene{mode: m, gctx: gctx, detail: detail, palette: p}
+	sc := &vectorScene{mode: m, gctx: gctx, detail: detail, palette: p.Interpolate(weaveInterpolate)}
 	_, _, _, cx, cy := gctx.Centered()
 	sc.bounds = g.Region{
 		Min: g.Point{X: -1 - cx, Y: -1 - cy},
@@ -211,7 +220,7 @@ func (s *vectorScene) Mode() Mode {
 
 func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 	_ = s.Hide()
-	s.palette = p
+	s.palette = p.Interpolate(weaveInterpolate)
 	err := s.Display()
 	if err != nil {
 		return err
@@ -221,7 +230,7 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 }
 
 func (s *vectorScene) Display() error {
-	s.wv = s.gctx.NewWeave(8, s.palette)
+	s.wv = s.gctx.NewWeave(16, s.palette)
 	s.pt = s.gctx.NewParticles(16, 1, s.palette)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
