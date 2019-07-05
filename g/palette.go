@@ -107,6 +107,10 @@ func (p Palette) Float32(pt Paint) (float32, float32, float32, float32) {
 	return f[0], f[1], f[2], 1.0
 }
 
+func (p Palette) Color(pt Paint) color.Color {
+	return p.RGBA[p.coerced(int(pt))]
+}
+
 // Inc yields the nth Paint after the given Paint. n may be negative,
 // but not negative and greater in magnitude than the length of the palette.
 func (p Palette) Inc(pt Paint, n int) Paint {
