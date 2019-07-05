@@ -1,8 +1,6 @@
 package g
 
 import (
-	"fmt"
-
 	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
@@ -67,7 +65,6 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 	offset := 0
 	r := dotData.vsByR[ps.r]
 	thickness := ps.Size * dotData.scales[ps.r]
-	ps.status = fmt.Sprintf("\nparticles: centered on %g, %g", ps.X, ps.Y)
 	for _, p := range ps.particles {
 		vs := ps.vertices[offset : offset+4]
 		x, y := p.x0+((p.X*p.psCos-p.Y*p.psSin)*ps.Size), p.y0+((p.X*p.psSin+p.Y*p.psCos)*ps.Size)
