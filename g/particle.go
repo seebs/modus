@@ -105,8 +105,10 @@ func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
 		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, p.Alpha
 		offset += 4
 	}
-	target.DrawTriangles(ps.vertices, ps.indices[:len(ps.particles)*6], dotData.img, &opt)
-	ebitenutil.DebugPrint(target, ps.status)
+	if target != nil {
+		target.DrawTriangles(ps.vertices, ps.indices[:len(ps.particles)*6], dotData.img, &opt)
+		ebitenutil.DebugPrint(target, ps.status)
+	}
 }
 
 type Particle struct {

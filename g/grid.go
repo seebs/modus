@@ -244,11 +244,8 @@ func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l FLoc, xscale, ysca
 
 // Draw displays the grid on the target screen.
 func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
-	w, h := target.Size()
-	// if xscale and yscale aren't identical, how should rotation work? well, at 90 degree rotations,
-	// we want the square to fit cleanly. so. rotate a theoretical unit square, then scale by {x, y}
-	xscale := float32(w) / float32(gr.Width) / 2
-	yscale := float32(h) / float32(gr.Height) / 2
+	xscale := scale / 2
+	yscale := scale / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
 	var offset int
 	gr.Iterate(func(generic Grid, l ILoc, n int, c *Cell) {
