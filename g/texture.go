@@ -410,15 +410,19 @@ func createSolidTexture() (*textureWithVertices, error) {
 
 func createDotTextures() (*textureWithVertices, error) {
 	twv := &textureWithVertices{}
-	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 128, Y: 128}})
+	// we make a square-ish thing: compute sqrt of the dotRenders set, then
+	// use that as our width-in-tiles.
+	tilesAcross := int(math.Sqrt(float32(len(dotRenders))))
+	tilesDown := (len(dotRenders) + tilesAcross - 1) / tilesAcross
+	img := image.NewRGBA(image.Rectangle{Min: image.Point{X: 0, Y: 0}, Max: image.Point{X: 64 * tilesAcross, Y: 64 * tilesDown}})
 	scalef := float32(62)
 	sums := make([]int, len(dotRenders))
 	maxSum := 0
 
 	for render := 0; render < len(dotRenders); render++ {
 		fn := dotRenders[render]
-		offsetX := (render % 2) * 64
-		offsetY := (render / 2) * 64
+		offsetX := (render % tilesAcross) * 64
+		offsetY := (render / tilesAcross) * 64
 		offsetXf := float32(offsetX)
 		offsetYf := float32(offsetY)
 		sum := 0

@@ -112,6 +112,7 @@ func simpleDemoInit(s *vectorScene) {
 		b.shield.Size = 0.6
 		b.initShield()
 		b.setShield()
+		b.shield.Dirty()
 		fmt.Printf("shield points: %v, %v\n", b.shield.Points[0], b.shield.Points[1])
 		copy(k1.Points, proto.pts)
 		k1.Dirty()
@@ -121,6 +122,7 @@ func simpleDemoInit(s *vectorScene) {
 			k1.Points[j].P = s.palette.Inc(k1.Points[j].P, b.pOffset)
 		}
 		b.pt = g.MovingPoint{Loc: g.Point{X: k1.X, Y: k1.Y}, Velocity: g.Vec{X: -k1.X * .002 * (float32(i) + 1), Y: -k1.Y * .002 * (float32(i) + 1)}, Bounds: s.bounds}
+		b.shield.X, b.shield.Y = b.pt.Loc.X, b.pt.Loc.Y
 		s.bouncers = append(s.bouncers, b)
 	}
 }
@@ -170,7 +172,7 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 		b.shieldSpin += .1
 		b.pt.Update()
 		b.ship.X, b.ship.Y = b.pt.Loc.X, b.pt.Loc.Y
-		b.shield.X, b.shield.Y = b.pt.Loc.X+cos*.1, b.pt.Loc.Y+sin*.1
+		b.shield.X, b.shield.Y = b.pt.Loc.X, b.pt.Loc.Y
 		b.ship.Dirty()
 		b.setShield()
 		b.shield.Dirty()
@@ -184,6 +186,7 @@ type vectorScene struct {
 	mode      vectorMode
 	wv        *g.Weave
 	pt        *g.Particles
+	tx        *g.Text
 	detail    int
 	cycle     int
 	t0        float32
@@ -232,15 +235,18 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 func (s *vectorScene) Display() error {
 	s.wv = s.gctx.NewWeave(16, s.palette)
 	s.pt = s.gctx.NewParticles(16, 1, s.palette)
+	var err error
+	s.tx, err = s.gctx.NewText("arcade", 24, s.palette)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
 	}
-	return nil
+	return err
 }
 
 func (s *vectorScene) Hide() error {
 	s.wv = nil
 	s.pt = nil
+	s.tx = nil
 	return nil
 }
 
@@ -254,11 +260,14 @@ func (s *vectorScene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 		s.wv.SetStatus(s.mode.compute(s, km))
 		s.pt.Tick()
 	}
+	s.tx.P = s.palette.Inc(s.tx.P, 1)
+	s.tx.Text = "got here"
 	return true, nil
 }
 
 func (s *vectorScene) Draw(screen *ebiten.Image) error {
 	s.gctx.Render(screen, func(t *ebiten.Image, scale float32) {
+		// s.tx.Draw(t, 1.0, scale)
 		s.wv.Draw(t, 1.0, scale)
 		s.pt.Draw(t, scale)
 	})
