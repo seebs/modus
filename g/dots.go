@@ -1,7 +1,6 @@
 package g
 
 import (
-	"fmt"
 	"sync"
 
 	math "github.com/chewxy/math32"
@@ -98,7 +97,7 @@ func makeDotGridHeight(w int, sx, sy float32) (int, int, int, int, float32) {
 			w--
 		}
 	}
-	fmt.Printf("%dx%d (size %d) [%d indices], grid scale %f\n", w, h, *major, (*major)*(*major)*6, scale*2)
+	// fmt.Printf("%dx%d (size %d) [%d indices], grid scale %f\n", w, h, *major, (*major)*(*major)*6, scale*2)
 	return w, h, *major, *minor, scale * 2
 }
 
@@ -155,8 +154,8 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 		dg.baseOffset = dg.coordOffsetY
 	}
 
-	fmt.Printf("%dx%d [actually %d/%d]: baseOffset %.2f, coordOffset %.2f/%.2f\n",
-		dg.W, dg.H, dg.Major, dg.Minor, dg.baseOffset, dg.coordOffsetX, dg.coordOffsetY)
+	// fmt.Printf("%dx%d [actually %d/%d]: baseOffset %.2f, coordOffset %.2f/%.2f\n",
+	//	dg.W, dg.H, dg.Major, dg.Minor, dg.baseOffset, dg.coordOffsetX, dg.coordOffsetY)
 	offset := uint16(0)
 	for i := range dg.baseDots {
 		dots := make([]DotGridBase, dg.Major)
@@ -205,10 +204,13 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 			dg.depthDirty[d] = false
 		}
 		opt.ColorM.Reset()
-		opt.ColorM.Scale(1.0, 1.0, 1.0, float64(dg.alphaDecays[d]))
-		target.DrawTriangles(dg.depthVertices[d], dg.indices, dotData.img, &opt)
+		if target != nil {
+			target.DrawTriangles(dg.depthVertices[d], dg.indices, dotData.img, &opt)
+		}
 	}
-	ebitenutil.DebugPrint(target, dg.status)
+	if target != nil {
+		ebitenutil.DebugPrint(target, dg.status)
+	}
 }
 
 // drawVertices computes the actual vertex contents given the state

@@ -264,5 +264,7 @@ func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
 		gr.drawCell(vs, &c.Cell, *c.Loc(), xscale, yscale)
 		offset += 4
 	}
-	target.DrawTriangles(gr.vertices, gr.indices, squareData.img, op)
+	if target != nil {
+		target.DrawTriangles(gr.vertices, gr.indices, squareData.img, op)
+	}
 }

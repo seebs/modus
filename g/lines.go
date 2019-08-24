@@ -601,11 +601,13 @@ func (pl *PolyLine) Draw(target *ebiten.Image, alpha float32, scale float32) {
 	}
 
 	// draw the triangles
-	target.DrawTriangles(pl.vertices, pl.indices, lineData.img, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
-	if pl.debug != nil {
-		pl.debug.Draw(target, alpha, scale)
+	if target != nil {
+		target.DrawTriangles(pl.vertices, pl.indices, lineData.img, &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter})
+		if pl.debug != nil {
+			pl.debug.Draw(target, alpha, scale)
+		}
+		ebitenutil.DebugPrint(target, pl.status)
 	}
-	ebitenutil.DebugPrint(target, pl.status)
 }
 
 // Length yields the number of points in the line.

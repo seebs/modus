@@ -24,8 +24,10 @@ var match3Modes = []match3Mode{
 }
 
 func init() {
-	for _, mode := range match3Modes {
-		allModes = append([]Mode{mode}, allModes...)
+	if true {
+		for _, mode := range match3Modes {
+			allModes = append([]Mode{mode}, allModes...)
+		}
 	}
 }
 

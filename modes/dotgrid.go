@@ -252,7 +252,7 @@ func distanceCompute(s *dotGridScene, base [][]g.DotGridBase, prev [][]g.DotGrid
 }
 
 func init() {
-	if false {
+	if true {
 		for _, mode := range dotGridModes {
 			allModes = append(allModes, mode)
 		}

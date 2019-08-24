@@ -24,7 +24,9 @@ func NewMap(keys ...ebiten.Key) Map {
 // State returns the current state of a key
 func (km Map) State(k ebiten.Key) byte {
 	if _, ok := km[k]; !ok {
-		km[k] = 0
+		if km != nil {
+			km[k] = 0
+		}
 	}
 	return km[k] & HOLD
 }

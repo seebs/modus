@@ -113,7 +113,7 @@ func simpleDemoInit(s *vectorScene) {
 		b.initShield()
 		b.setShield()
 		b.shield.Dirty()
-		fmt.Printf("shield points: %v, %v\n", b.shield.Points[0], b.shield.Points[1])
+		// fmt.Printf("shield points: %v, %v\n", b.shield.Points[0], b.shield.Points[1])
 		copy(k1.Points, proto.pts)
 		k1.Dirty()
 		k1.Size = float32(1.0) / float32(i+1)

@@ -172,7 +172,7 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 	totalWidth := hexWidth * (float32(gr.Width) + 0.5)
 	gr.ox, gr.oy = (float32(sx)-totalWidth)/2, (float32(sy)-totalHeight)/2
 	gr.Height = int(vHexes)
-	fmt.Printf("%dx%d => %d [*3]\n", gr.Width, gr.Height, gr.Width*gr.Height)
+	// fmt.Printf("%dx%d => %d [*3]\n", gr.Width, gr.Height, gr.Width*gr.Height)
 
 	// fmt.Printf("sx %d, w %d, hexWidth %.1f\n", sx, gr.Width, hexWidth)
 	// fmt.Printf("hexHeight %.1f, sy %d, vHexes %f, total %f\n", hexHeight, sy, vHexes, totalHeight)
@@ -197,7 +197,7 @@ func newHexGrid(w int, r RenderType, p *Palette, sx, sy int) *HexGrid {
 		}
 		gr.Cells[col] = r
 	}
-	fmt.Printf("indices: %d\n", len(gr.indices))
+	// fmt.Printf("indices: %d\n", len(gr.indices))
 	return gr
 }
 
@@ -312,7 +312,7 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 					adj[i] = "N"
 				}
 			}
-			if false {
+			if false && target != nil {
 				ebitenutil.DebugPrintAt(target, fmt.Sprintf("  %s  %s\n%s %2d,%2d %s\n  %s  %s",
 					adj[2], adj[1], adj[3],
 					col, row,
@@ -325,8 +325,10 @@ func (gr *HexGrid) Draw(target *ebiten.Image, scale float32) {
 			offset += 3
 		}
 	}
-	target.DrawTriangles(gr.vertices, gr.indices, hexData.img, op)
-	ebitenutil.DebugPrint(target, gr.Status)
+	if target != nil {
+		target.DrawTriangles(gr.vertices, gr.indices, hexData.img, op)
+		ebitenutil.DebugPrint(target, gr.Status)
+	}
 }
 
 // Iterate runs fn on the entire grid.

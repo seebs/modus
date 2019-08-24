@@ -35,5 +35,7 @@ func newText(fontName string, size int, palette *Palette, scale, offsetX, offset
 }
 
 func (t *Text) Draw(target *ebiten.Image, alpha float32, scale float32) {
-	text.Draw(target, t.Text, t.face, int(t.X*t.scale+t.offsetX), int(t.Y*t.scale+t.offsetY), t.palette.Color(t.P))
+	if target != nil {
+		text.Draw(target, t.Text, t.face, int(t.X*t.scale+t.offsetX), int(t.Y*t.scale+t.offsetY), t.palette.Color(t.P))
+	}
 }
