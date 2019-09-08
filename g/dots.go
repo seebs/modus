@@ -17,10 +17,10 @@ type DotGrid struct {
 	Render                     int
 	depth                      int
 	W, H, Major, Minor         int
-	baseDots                   [][]DotGridBase
+	baseDots                   []DotGridBase
 	baseOffset                 float32
 	coordOffsetX, coordOffsetY float32
-	states                     [][][]DotGridState
+	states                     [][]DotGridState
 	Compute                    DotCompute
 	ComputeInit                DotComputeInit
 	vertices                   []ebiten.Vertex
@@ -56,8 +56,8 @@ type DotGridState struct {
 
 // DotCompute is a function which operates on a DotGridBase, looks at the
 // previous state if it wants to, and computes the next state.
-type DotCompute func(base [][]DotGridBase, prev [][]DotGridState, next [][]DotGridState) string
-type DotComputeInit func(base [][]DotGridBase, initial [][]DotGridState)
+type DotCompute func(w, h int, base []DotGridBase, prev []DotGridState, next []DotGridState) string
+type DotComputeInit func(w, h int, base []DotGridBase, initial []DotGridState)
 
 var (
 	initDotData sync.Once
@@ -145,8 +145,8 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	dg.vertices = make([]ebiten.Vertex, depth*4*quads)
 	dg.depthVertices = make([][]ebiten.Vertex, dg.depth)
 	dg.indices = make([]uint16, 0, 6*quads)
-	dg.states = make([][][]DotGridState, dg.depth)
-	dg.baseDots = make([][]DotGridBase, dg.Major)
+	dg.states = make([][]DotGridState, dg.depth)
+	dg.baseDots = make([]DotGridBase, dg.Major*dg.Major)
 	dg.depthDirty = make([]bool, dg.depth)
 	if dg.W == dg.Major {
 		dg.baseOffset = dg.coordOffsetX
@@ -157,9 +157,8 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	// fmt.Printf("%dx%d [actually %d/%d]: baseOffset %.2f, coordOffset %.2f/%.2f\n",
 	//	dg.W, dg.H, dg.Major, dg.Minor, dg.baseOffset, dg.coordOffsetX, dg.coordOffsetY)
 	offset := uint16(0)
-	for i := range dg.baseDots {
-		dots := make([]DotGridBase, dg.Major)
-		dg.baseDots[i] = dots
+	for i := 0; i < dg.Major; i++ {
+		dots := dg.baseDots[i*dg.Major : (i+1)*dg.Major]
 		x0 := (((float32(i) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
 		for j := range dots {
 			y0 := (((float32(j) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
@@ -180,15 +179,18 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 		// this is the default, but to clarify: a thing isn't considered
 		// dirty until it gets computed.
 		dg.depthDirty[d] = false
-		dg.states[d] = make([][]DotGridState, dg.Major)
+		dg.states[d] = make([]DotGridState, dg.Major*dg.Major)
 		dg.depthVertices[d] = dg.vertices[quads*d*4 : quads*(d+1)*4]
-		for i := 0; i < dg.Major; i++ {
-			dg.states[d][i] = make([]DotGridState, dg.Major)
-			for j := 0; j < dg.Major; j++ {
-				vs := dg.vertices[vOffset : vOffset+4]
-				copy(vs, dotData.vsByR[dg.Render])
-				vOffset += 4
-			}
+		// copy in an initial row
+		for j := 0; j < dg.Major; j++ {
+			vs := dg.vertices[vOffset : vOffset+4]
+			copy(vs, dotData.vsByR[dg.Render])
+			vOffset += 4
+		}
+		for i := 1; i < dg.Major; i++ {
+			states := dg.vertices[vOffset*i : vOffset*(i+1)]
+			// copy in that first row
+			copy(states, dg.vertices[:vOffset])
 		}
 	}
 	return dg
@@ -214,33 +216,31 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 }
 
 // drawVertices computes the actual vertex contents given the state
-func (dg *DotGrid) drawVertices(state [][]DotGridState, dvs []ebiten.Vertex, scale float32) {
+func (dg *DotGrid) drawVertices(state []DotGridState, dvs []ebiten.Vertex, scale float32) {
 	offset := 0
 	r := dotData.vsByR[dg.Render]
 	thickness := dg.Thickness * dotData.scales[dg.Render]
-	for i := 0; i < dg.Major; i++ {
-		for j := 0; j < dg.Major; j++ {
-			s := &state[i][j]
-			vs := dvs[offset : offset+4]
-			// scale is a multiplier on the base thickness/size of
-			// dots
-			x, y := (s.X*dg.scale)+dg.ox, (s.Y*dg.scale)+dg.oy
-			size := thickness * s.S
-			vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
-			vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
-			vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale
-			vs[3].DstX, vs[3].DstY = (x+size)*scale, (y+size)*scale
-			vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
-			vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
-			vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
-			vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
-			r, g, b, _ := dg.Palette.Float32(s.P)
-			vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, s.A
-			vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, s.A
-			vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, s.A
-			vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, s.A
-			offset += 4
-		}
+	for i := range state {
+		s := &state[i]
+		vs := dvs[offset : offset+4]
+		// scale is a multiplier on the base thickness/size of
+		// dots
+		x, y := (s.X*dg.scale)+dg.ox, (s.Y*dg.scale)+dg.oy
+		size := thickness * s.S
+		vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
+		vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
+		vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale
+		vs[3].DstX, vs[3].DstY = (x+size)*scale, (y+size)*scale
+		vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
+		vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
+		vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
+		vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
+		r, g, b, _ := dg.Palette.Float32(s.P)
+		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, s.A
+		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, s.A
+		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, s.A
+		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, s.A
+		offset += 4
 	}
 }
 
@@ -261,11 +261,11 @@ func (dg *DotGrid) Tick() {
 	copy(dg.states[1:], dg.states)
 	dg.states[0] = lastState
 
-	dg.status = dg.Compute(dg.baseDots, dg.states[1], dg.states[0])
+	dg.status = dg.Compute(dg.W, dg.H, dg.baseDots, dg.states[1], dg.states[0])
 }
 
 func (dg *DotGrid) InitCompute() {
 	if dg.ComputeInit != nil {
-		dg.ComputeInit(dg.baseDots, dg.states[0])
+		dg.ComputeInit(dg.W, dg.H, dg.baseDots, dg.states[0])
 	}
 }
