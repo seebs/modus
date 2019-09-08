@@ -31,7 +31,7 @@ var vectorModes = []vectorMode{
 
 func init() {
 	for _, mode := range vectorModes {
-		allModes = append(allModes, mode)
+		defaultList.Add(mode)
 	}
 }
 

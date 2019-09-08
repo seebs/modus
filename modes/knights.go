@@ -43,10 +43,8 @@ var knightModes = []knightMode{
 }
 
 func init() {
-	if true {
-		for _, mode := range knightModes {
-			allModes = append(allModes, mode)
-		}
+	for _, mode := range knightModes {
+		defaultList.Add(mode)
 	}
 }
 

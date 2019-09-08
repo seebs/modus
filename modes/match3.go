@@ -24,10 +24,8 @@ var match3Modes = []match3Mode{
 }
 
 func init() {
-	if true {
-		for _, mode := range match3Modes {
-			allModes = append([]Mode{mode}, allModes...)
-		}
+	for _, mode := range match3Modes {
+		defaultList.Add(mode)
 	}
 }
 
