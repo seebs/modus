@@ -42,7 +42,6 @@ type DotGrid struct {
 type DotGridBase struct {
 	X, Y   float32
 	DX, DY float32
-	Aux    float32
 }
 
 // DotGridState reports the state of a given dot after a rendering pass. States

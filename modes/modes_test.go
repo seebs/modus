@@ -31,7 +31,7 @@ func benchmarkOneModeTickDraw(b *testing.B, scene Scene) {
 	}
 }
 
-var detailLevels = []int{5, 10, 20}
+var detailLevels = []int{5, 10, 20, 30}
 
 func TestMain(m *testing.M) {
 	ApplyList(os.Getenv("MODUS_MODES"))

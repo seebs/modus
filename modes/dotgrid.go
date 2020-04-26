@@ -27,6 +27,7 @@ var dotGridModes = []dotGridMode{
 	{name: "gravity", depth: 8, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit, detail: gravityDetail},
 	{name: "distance", depth: 8, cycleTime: dotGridCycleTime, compute: distanceCompute},
 	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
+	{name: "reallyBoring", depth: 8, cycleTime: dotGridCycleTime, compute: reallyBoringCompute},
 }
 
 func (m *dotGridMode) Detail(base int) int {
@@ -36,7 +37,7 @@ func (m *dotGridMode) Detail(base int) int {
 	return base * 4
 }
 
-func reallyBoringCompute(s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
+func reallyBoringCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
 	for i := range base {
 		b := &base[i]
 		next[i] = g.DotGridState{X: b.X, Y: b.Y, P: 0, A: 1, S: 1}
@@ -79,29 +80,23 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 			rowCount = 0
 		}
 		var myCx, myCy float32
-		for kidx := 0; kidx < idx; kidx++ {
+		px, py := prev[idx].X, prev[idx].Y
+		pSub := prev[:idx]
+		bSub := base[:idx]
+		for kidx := range pSub {
 			computed++
-			dx, dy := prev[kidx].X-prev[idx].X, prev[kidx].Y-prev[idx].Y
-			if dx != 0 || dy != 0 {
-				gscale := dx*dx + dy*dy
-				if gscale < 0.01 {
-					gscale = 0.01
-				}
-				gscale += 0.1 + s.pulse
-				gscale *= factor * 5000
-				dx, dy = dx/gscale, dy/gscale
-				base[idx].DX += dx
-				base[idx].DY += dy
-				base[kidx].DX -= dx
-				base[kidx].DY -= dy
-			} else {
-				// if things have the same location, nudge them apart
-				base[idx].DX += 0.0001
-				base[idx].DY += 0.0001
-				base[kidx].DX -= 0.0001
-				base[kidx].DY -= 0.0001
+			dx, dy := pSub[kidx].X-px, pSub[kidx].Y-py
+			gscale := dx*dx + dy*dy
+			if gscale < 0.01 {
+				gscale = 0.01
 			}
-
+			gscale += 0.1 + s.pulse
+			gscale *= factor * 5000
+			dx, dy = dx/gscale, dy/gscale
+			base[idx].DX += dx
+			base[idx].DY += dy
+			bSub[kidx].DX -= dx
+			bSub[kidx].DY -= dy
 		}
 		// pull things towards nominal center
 		if (idx+alternate)&1 == 1 {
@@ -111,16 +106,16 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 			myCx, myCy = ncx, ncy
 			cidx = 3
 		}
-		dx, dy := prev[idx].X-myCx, prev[idx].Y-myCy
-		dist := math.Sqrt(dx*dx + dy*dy)
+		dx, dy := px-myCx, py-myCy
+		dist2 := dx*dx + dy*dy
 		speed := math.Sqrt(base[idx].DX*base[idx].DX + base[idx].DY*base[idx].DY)
 		// damping factor: push towards center of screen
 		base[idx].DX -= dx / 10000
 		base[idx].DY -= dy / 10000
-		next[idx].X = prev[idx].X + base[idx].DX
-		next[idx].Y = prev[idx].Y + base[idx].DY
+		next[idx].X = px + base[idx].DX
+		next[idx].Y = py + base[idx].DY
 		// made it quite a ways off screen... move to your center and emit
-		if dist > 2 {
+		if dist2 > 4 {
 			dirx, diry := cx[cidx], cy[cidx]
 			// cidx = (cidx + 1) % 4
 			// since cx = sin t, cy = cos t, the center is moving
@@ -142,7 +137,7 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 		}
 		next[idx].A = 1
 		next[idx].S = sinv
-
+		base[idx].DX, base[idx].DY = base[idx].DX, base[idx].DY
 	}
 	return fmt.Sprintf("%d computed. [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
 		computed,
