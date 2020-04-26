@@ -14,8 +14,8 @@ import (
 // knightMode is one of the internal modes based on knight moves
 type dotGridMode struct {
 	cycleTime   int // number of ticks to go by between updates
-	compute     func(int, int, *dotGridScene, []g.DotGridBase, []g.DotGridState, []g.DotGridState) string
-	computeInit func(int, int, *dotGridScene, []g.DotGridBase, []g.DotGridState)
+	compute     func(int, int, *dotGridScene, g.DotGridBase, g.DotGridState, g.DotGridState) string
+	computeInit func(int, int, *dotGridScene, g.DotGridBase, g.DotGridState)
 	detail      func(int) int
 	name        string
 	depth       int
@@ -37,10 +37,12 @@ func (m *dotGridMode) Detail(base int) int {
 	return base * 4
 }
 
-func reallyBoringCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
-	for i := range base {
-		b := &base[i]
-		next[i] = g.DotGridState{X: b.X, Y: b.Y, P: 0, A: 1, S: 1}
+func reallyBoringCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
+	for i := range base.Locs {
+		next.Locs[i] = base.Locs[i]
+		next.S[i] = 1
+		next.A[i] = 1
+		next.P[i] = 0
 	}
 	return ""
 }
@@ -55,9 +57,10 @@ func gravityDetail(base int) int {
 }
 
 // let's do... gravity!
-func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
+func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 	cshift := s.t0 / 256
-	factor := float32(w * h)
+	factor := float32(w*h) * 5000
+	gScaleMod := 0.1 + s.pulse
 	computed := 0
 	t := (s.t0 / 60)
 	s.cx, s.cy = math.Sincos(t)
@@ -73,31 +76,31 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 	ncx, ncy := -s.cx, -s.cy
 	rowCount := 0
 	alternate := 0
-	for idx := len(base) - 1; idx >= 0; idx-- {
+	for idx := len(base.Locs) - 1; idx >= 0; idx-- {
 		rowCount++
 		if rowCount == w {
 			alternate = 1 - alternate
 			rowCount = 0
 		}
 		var myCx, myCy float32
-		px, py := prev[idx].X, prev[idx].Y
-		pSub := prev[:idx]
-		bSub := base[:idx]
+		px, py := prev.Locs[idx].X, prev.Locs[idx].Y
+		pSub := prev.Locs[:idx]
+		bSub := base.Vecs[:idx]
+		bDX, bDY := base.Vecs[idx].X, base.Vecs[idx].Y
 		for kidx := range pSub {
-			computed++
 			dx, dy := pSub[kidx].X-px, pSub[kidx].Y-py
 			gscale := dx*dx + dy*dy
 			if gscale < 0.01 {
 				gscale = 0.01
 			}
-			gscale += 0.1 + s.pulse
-			gscale *= factor * 5000
+			gscale = (gscale + gScaleMod) * factor
 			dx, dy = dx/gscale, dy/gscale
-			base[idx].DX += dx
-			base[idx].DY += dy
-			bSub[kidx].DX -= dx
-			bSub[kidx].DY -= dy
+			bDX += dx
+			bDY += dy
+			bSub[kidx].X -= dx
+			bSub[kidx].Y -= dy
 		}
+		computed += idx
 		// pull things towards nominal center
 		if (idx+alternate)&1 == 1 {
 			myCx, myCy = s.cx, s.cy
@@ -108,12 +111,12 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 		}
 		dx, dy := px-myCx, py-myCy
 		dist2 := dx*dx + dy*dy
-		speed := math.Sqrt(base[idx].DX*base[idx].DX + base[idx].DY*base[idx].DY)
+		speed := math.Sqrt(bDX*bDX + bDY*bDY)
 		// damping factor: push towards center of screen
-		base[idx].DX -= dx / 10000
-		base[idx].DY -= dy / 10000
-		next[idx].X = px + base[idx].DX
-		next[idx].Y = py + base[idx].DY
+		bDX -= dx / 10000
+		bDY -= dy / 10000
+		next.Locs[idx].X = px + bDX
+		next.Locs[idx].Y = py + bDY
 		// made it quite a ways off screen... move to your center and emit
 		if dist2 > 4 {
 			dirx, diry := cx[cidx], cy[cidx]
@@ -121,42 +124,41 @@ func gravityCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Do
 			// since cx = sin t, cy = cos t, the center is moving
 			// in the direction of their derivatives... which are
 			// cos t and -sin t, respectively.
-			base[idx].DX = (base[idx].DX * 0.05) + (dirx * .05)
-			base[idx].DY = (base[idx].DY * 0.05) + (diry * .05)
-			next[idx].X = myCx
-			next[idx].Y = myCy
+			bDX = (bDX * 0.05) + (dirx * .05)
+			bDY = (bDY * 0.05) + (diry * .05)
+			next.Locs[idx].X = myCx
+			next.Locs[idx].Y = myCy
 		}
 		sinv := 1 - (speed * 30)
 		if sinv < 0.05 {
 			sinv = 0.05
 		}
 		if (idx+alternate)&1 == 1 {
-			next[idx].P = g.Paint(int(speed*900+cshift) - 10)
+			next.P[idx] = g.Paint(int(speed*900+cshift) - 10)
 		} else {
-			next[idx].P = g.Paint(int(speed*900+cshift) + 26)
+			next.P[idx] = g.Paint(int(speed*900+cshift) + 26)
 		}
-		next[idx].A = 1
-		next[idx].S = sinv
-		base[idx].DX, base[idx].DY = base[idx].DX, base[idx].DY
+		next.A[idx] = 1
+		next.S[idx] = sinv
+		base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
 	}
 	return fmt.Sprintf("%d computed. [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
 		computed,
-		base[0].DX, base[0].DY,
-		prev[0].X, prev[0].Y,
-		next[0].X, next[0].Y)
+		base.Vecs[0].X, base.Vecs[0].Y,
+		prev.Locs[0].X, prev.Locs[0].Y,
+		next.Locs[0].X, next.Locs[0].Y)
 }
 
-func gravityComputeInit(w, h int, s *dotGridScene, base []g.DotGridBase, init []g.DotGridState) {
-	for idx := range base {
-		init[idx].A = 1
-		init[idx].S = 1
-		init[idx].P = g.Paint(0)
-		init[idx].X = base[idx].X
-		init[idx].Y = base[idx].Y
+func gravityComputeInit(w, h int, s *dotGridScene, base g.DotGridBase, init g.DotGridState) {
+	for idx := range base.Locs {
+		init.A[idx] = 1
+		init.S[idx] = 1
+		init.P[idx] = g.Paint(0)
+		init.Locs[idx] = base.Locs[idx]
 	}
 }
 
-func boringCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
+func boringCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 	pulse := s.pulse
 	pinv := s.pinv
 	if pulse > 0.95 {
@@ -167,10 +169,9 @@ func boringCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Dot
 		pulse = 0.05
 		pinv = 1 - pulse
 	}
-	for idx := range base {
-		b := &base[idx]
-		old := &prev[idx]
-		x0, y0 := b.X, b.Y
+	for idx := range base.Locs {
+		old := prev.Locs[idx]
+		x0, y0 := base.Locs[idx].X, base.Locs[idx].Y
 		t := (y0*float32(s.gr.H)*float32(s.gr.W) + x0*float32(s.gr.W)) + (s.pcycle * math.Pi * 2)
 		x := pinv*x0 + pulse*math.Sin(t)
 		y := pinv*y0 + pulse*math.Cos(t)
@@ -186,13 +187,16 @@ func boringCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.Dot
 		if scale < 0.2 {
 			scale = 0.2
 		}
-		next[idx] = g.DotGridState{X: x, Y: y, P: p, A: 0.7, S: scale}
+		next.A[idx] = 0.7
+		next.S[idx] = scale
+		next.P[idx] = p
+		next.Locs[idx] = g.FLoc{X: x, Y: y}
 	}
 	return ""
 	// return fmt.Sprintf("t0: %.1f pulse: %.2f pinv: %.2f", s.t0, s.pulse, s.pinv)
 }
 
-func distanceCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
+func distanceCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 	pulse := s.pulse
 	pinv := s.pinv
 	if pulse > 0.95 {
@@ -204,10 +208,9 @@ func distanceCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.D
 		pinv = 1 - pulse
 	}
 	_ = pinv
-	for idx := range base {
-		b := &base[idx]
-		old := &prev[idx]
-		x0, y0 := b.X, b.Y
+	for idx := range base.Locs {
+		old := prev.Locs[idx]
+		x0, y0 := base.Locs[idx].X, base.Locs[idx].Y
 		distance := math.Sqrt(x0*x0 + y0*y0)
 		var t float32
 		if distance >= 1 {
@@ -230,7 +233,10 @@ func distanceCompute(w, h int, s *dotGridScene, base []g.DotGridBase, prev []g.D
 		if scale < 0.2 {
 			scale = 0.2
 		}
-		next[idx] = g.DotGridState{X: x, Y: y, P: p, A: 0.7, S: scale}
+		next.A[idx] = 0.7
+		next.S[idx] = scale
+		next.P[idx] = p
+		next.Locs[idx] = g.FLoc{X: x, Y: y}
 	}
 	return ""
 	// return fmt.Sprintf("t0: %.1f pulse: %.2f pinv: %.2f", s.t0, s.pulse, s.pinv)
@@ -295,11 +301,11 @@ func (s *dotGridScene) Reset(detail int, p *g.Palette) error {
 
 func (s *dotGridScene) Display() error {
 	s.gr = s.gctx.NewDotGrid(s.mode.Detail(s.detail), 8, s.mode.depth, 1, s.palette)
-	s.gr.Compute = func(w, h int, base []g.DotGridBase, prev []g.DotGridState, next []g.DotGridState) string {
+	s.gr.Compute = func(w, h int, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 		return s.mode.compute(w, h, s, base, prev, next)
 	}
 	if s.mode.computeInit != nil {
-		s.gr.ComputeInit = func(w, h int, base []g.DotGridBase, init []g.DotGridState) {
+		s.gr.ComputeInit = func(w, h int, base g.DotGridBase, init g.DotGridState) {
 			s.mode.computeInit(w, h, s, base, init)
 		}
 	}

@@ -17,16 +17,17 @@ type DotGrid struct {
 	Render                     int
 	depth                      int
 	W, H, Major, Minor         int
-	baseDots                   []DotGridBase
+	baseDots                   DotGridBase
 	baseOffset                 float32
 	coordOffsetX, coordOffsetY float32
-	states                     [][]DotGridState
+	states                     []DotGridState
 	Compute                    DotCompute
 	ComputeInit                DotComputeInit
 	vertices                   []ebiten.Vertex
 	depthVertices              [][]ebiten.Vertex
 	depthDirty                 []bool
 	indices                    []uint16
+	quads                      int
 	// coordinate space to screen space
 	scale, ox, oy float32
 	gridScale     float32
@@ -40,23 +41,23 @@ type DotGrid struct {
 // A given mode gets to define how it uses the other members; the DotGridBase
 // objects are shared between rendering passes.
 type DotGridBase struct {
-	X, Y   float32
-	DX, DY float32
+	Locs []FLoc
+	Vecs []FVec
 }
 
 // DotGridState reports the state of a given dot after a rendering pass. States
 // are used to generate vertices when drawing passes happen.
 type DotGridState struct {
-	X, Y float32
-	P    Paint
-	A    float32
-	S    float32
+	Locs []FLoc
+	P    []Paint
+	A    []float32
+	S    []float32
 }
 
 // DotCompute is a function which operates on a DotGridBase, looks at the
 // previous state if it wants to, and computes the next state.
-type DotCompute func(w, h int, base []DotGridBase, prev []DotGridState, next []DotGridState) string
-type DotComputeInit func(w, h int, base []DotGridBase, initial []DotGridState)
+type DotCompute func(w, h int, base DotGridBase, prev DotGridState, next DotGridState) string
+type DotComputeInit func(w, h int, base DotGridBase, initial DotGridState)
 
 var (
 	initDotData sync.Once
@@ -140,12 +141,15 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	}
 	// each dot is a quad, which means it's 4 vertices and 6 indices, and
 	// the indices don't change
-	quads := dg.Major * dg.Major
-	dg.vertices = make([]ebiten.Vertex, depth*4*quads)
+	dg.quads = dg.Major * dg.Major
+	dg.vertices = make([]ebiten.Vertex, depth*4*dg.quads)
 	dg.depthVertices = make([][]ebiten.Vertex, dg.depth)
-	dg.indices = make([]uint16, 0, 6*quads)
-	dg.states = make([][]DotGridState, dg.depth)
-	dg.baseDots = make([]DotGridBase, dg.Major*dg.Major)
+	dg.indices = make([]uint16, 0, 6*dg.quads)
+	dg.states = make([]DotGridState, dg.depth)
+	dg.baseDots = DotGridBase{
+		Locs: make([]FLoc, dg.quads),
+		Vecs: make([]FVec, dg.quads),
+	}
 	dg.depthDirty = make([]bool, dg.depth)
 	if dg.W == dg.Major {
 		dg.baseOffset = dg.coordOffsetX
@@ -157,7 +161,7 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 	//	dg.W, dg.H, dg.Major, dg.Minor, dg.baseOffset, dg.coordOffsetX, dg.coordOffsetY)
 	offset := uint16(0)
 	for i := 0; i < dg.Major; i++ {
-		dots := dg.baseDots[i*dg.Major : (i+1)*dg.Major]
+		dots := dg.baseDots.Locs[i*dg.Major : (i+1)*dg.Major]
 		x0 := (((float32(i) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
 		for j := range dots {
 			y0 := (((float32(j) / float32(dg.H-1)) - 0.5) * 2) - dg.baseOffset
@@ -178,8 +182,13 @@ func newDotGrid(w int, thickness float32, depth int, r RenderType, p *Palette, s
 		// this is the default, but to clarify: a thing isn't considered
 		// dirty until it gets computed.
 		dg.depthDirty[d] = false
-		dg.states[d] = make([]DotGridState, dg.Major*dg.Major)
-		dg.depthVertices[d] = dg.vertices[quads*d*4 : quads*(d+1)*4]
+		dg.states[d] = DotGridState{
+			Locs: make([]FLoc, dg.quads),
+			P:    make([]Paint, dg.quads),
+			A:    make([]float32, dg.quads),
+			S:    make([]float32, dg.quads),
+		}
+		dg.depthVertices[d] = dg.vertices[dg.quads*d*4 : dg.quads*(d+1)*4]
 		// copy in an initial row
 		for j := 0; j < dg.Major; j++ {
 			vs := dg.vertices[vOffset : vOffset+4]
@@ -215,17 +224,20 @@ func (dg *DotGrid) Draw(target *ebiten.Image, scale float32) {
 }
 
 // drawVertices computes the actual vertex contents given the state
-func (dg *DotGrid) drawVertices(state []DotGridState, dvs []ebiten.Vertex, scale float32) {
+func (dg *DotGrid) drawVertices(state DotGridState, dvs []ebiten.Vertex, scale float32) {
 	offset := 0
 	r := dotData.vsByR[dg.Render]
 	thickness := dg.Thickness * dotData.scales[dg.Render]
-	for i := range state {
-		s := &state[i]
+	locs := state.Locs[:dg.quads]
+	a := state.A[:dg.quads]
+	s := state.S[:dg.quads]
+	p := state.P[:dg.quads]
+	for i := 0; i < dg.quads; i++ {
 		vs := dvs[offset : offset+4]
 		// scale is a multiplier on the base thickness/size of
 		// dots
-		x, y := (s.X*dg.scale)+dg.ox, (s.Y*dg.scale)+dg.oy
-		size := thickness * s.S
+		x, y := (locs[i].X*dg.scale)+dg.ox, (locs[i].Y*dg.scale)+dg.oy
+		size := thickness * s[i]
 		vs[0].DstX, vs[0].DstY = (x-size)*scale, (y-size)*scale
 		vs[1].DstX, vs[1].DstY = (x+size)*scale, (y-size)*scale
 		vs[2].DstX, vs[2].DstY = (x-size)*scale, (y+size)*scale
@@ -234,11 +246,12 @@ func (dg *DotGrid) drawVertices(state []DotGridState, dvs []ebiten.Vertex, scale
 		vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
 		vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
 		vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
-		r, g, b, _ := dg.Palette.Float32(s.P)
-		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, s.A
-		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, s.A
-		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, s.A
-		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, s.A
+		r, g, b, _ := dg.Palette.Float32(p[i])
+		ai := a[i]
+		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, ai
+		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, ai
+		vs[2].ColorR, vs[2].ColorG, vs[2].ColorB, vs[2].ColorA = r, g, b, ai
+		vs[3].ColorR, vs[3].ColorG, vs[3].ColorB, vs[3].ColorA = r, g, b, ai
 		offset += 4
 	}
 }
