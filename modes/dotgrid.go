@@ -72,16 +72,16 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 	cx[1], cy[1] = s.cy, -s.cx
 	cx[2], cy[2] = -s.cx, -s.cy
 	cx[3], cy[3] = -s.cy, s.cx
-	cidx := 0
-	ncx, ncy := -s.cx, -s.cy
+	var cIdx int
 	rowCount := 0
-	alternate := 0
+	row := 0
 	for idx := len(base.Locs) - 1; idx >= 0; idx-- {
 		rowCount++
 		if rowCount == w {
-			alternate = 1 - alternate
+			row++
 			rowCount = 0
 		}
+		cIdx = ((row & 1) << 1) ^ (rowCount & 1)
 		var myCx, myCy float32
 		px, py := prev.Locs[idx].X, prev.Locs[idx].Y
 		pSub := prev.Locs[:idx]
@@ -102,13 +102,7 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		}
 		computed += idx
 		// pull things towards nominal center
-		if (idx+alternate)&1 == 1 {
-			myCx, myCy = s.cx, s.cy
-			cidx = 1
-		} else {
-			myCx, myCy = ncx, ncy
-			cidx = 3
-		}
+		myCx, myCy = cx[cIdx], cy[cIdx]
 		dx, dy := px-myCx, py-myCy
 		dist2 := dx*dx + dy*dy
 		speed := math.Sqrt(bDX*bDX + bDY*bDY)
@@ -119,11 +113,7 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		next.Locs[idx].Y = py + bDY
 		// made it quite a ways off screen... move to your center and emit
 		if dist2 > 4 {
-			dirx, diry := cx[cidx], cy[cidx]
-			// cidx = (cidx + 1) % 4
-			// since cx = sin t, cy = cos t, the center is moving
-			// in the direction of their derivatives... which are
-			// cos t and -sin t, respectively.
+			dirx, diry := cx[(cIdx + 2) & 3], cy[(cIdx + 2) & 3]
 			bDX = (bDX * 0.05) + (dirx * .05)
 			bDY = (bDY * 0.05) + (diry * .05)
 			next.Locs[idx].X = myCx
@@ -133,11 +123,8 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		if sinv < 0.05 {
 			sinv = 0.05
 		}
-		if (idx+alternate)&1 == 1 {
-			next.P[idx] = g.Paint(int(speed*900+cshift) - 10)
-		} else {
-			next.P[idx] = g.Paint(int(speed*900+cshift) + 26)
-		}
+
+		next.P[idx] = g.Paint(int(speed*900+cshift) - 10 + (18 * cIdx))
 		next.A[idx] = 1
 		next.S[idx] = sinv
 		base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
