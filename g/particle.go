@@ -1,6 +1,8 @@
 package g
 
 import (
+	"sync"
+
 	math "github.com/chewxy/math32"
 
 	"github.com/hajimehoshi/ebiten"
@@ -22,7 +24,10 @@ type Particles struct {
 	scale, offsetX, offsetY float32
 }
 
+var particleTextureSetup sync.Once
+
 func newParticles(size float32, r RenderType, p *Palette, scale, offsetX, offsetY float32) *Particles {
+	particleTextureSetup.Do(textureSetup)
 	return &Particles{Size: size, r: r, palette: p, scale: scale, offsetX: offsetX, offsetY: offsetY}
 }
 
@@ -43,15 +48,10 @@ func (ps *Particles) Add(anim ParticleAnimation, p Paint, X0, Y0 float32) *Parti
 
 // Tick returns true when it's done, at which point the emitter is probably done.
 func (ps *Particles) Tick() bool {
-	for idx, p := range ps.particles {
-		if p.Anim.Tick(p) {
-			ps.particles[idx] = nil
-		}
-	}
 	j := 0
-	for i := 0; i < len(ps.particles); i++ {
-		if ps.particles[i] != nil {
-			ps.particles[j] = ps.particles[i]
+	for _, p := range ps.particles {
+		if !p.Anim.Tick(p) {
+			ps.particles[j] = p
 			j++
 		}
 	}
