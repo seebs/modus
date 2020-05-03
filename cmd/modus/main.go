@@ -108,7 +108,7 @@ func newMode() error {
 }
 
 func main() {
-	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amn#pPqs#x#y#")
+	opts, _, err := gogetopt.GetOpt(os.Args[1:], "amM:n#pPqs#x#y#")
 	if err != nil {
 		log.Fatalf("option parsing failed: %s\n", err)
 	}
@@ -156,6 +156,11 @@ func main() {
 		screenHeight = opts["y"].Int
 	}
 	gctx = g.NewContext(screenWidth, screenHeight, opts.Seen("a"))
+	if opts.Seen("M") {
+		modes.ApplyList(opts["M"].Value)
+	} else {
+		modes.ApplyList(os.Getenv("MODUS_MODES"))
+	}
 	allModes = modes.ListModes()
 	currentMode = -1
 	err = newMode()
