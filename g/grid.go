@@ -73,6 +73,7 @@ func newSquareGrid(w int, r RenderType, p *Palette, sx, sy int) *SquareGrid {
 		h = int(math.Floor(float32(sx) / scale))
 		w, h = h, w
 	}
+	// fmt.Printf("squareGrid: %dx%d screen, %dx%d grid\n", sx, sy, w, h)
 	textureSetup()
 	gr := SquareGrid{
 		Width:   w,
@@ -244,8 +245,8 @@ func (gr *SquareGrid) drawCell(vs []ebiten.Vertex, c *Cell, l FLoc, xscale, ysca
 
 // Draw displays the grid on the target screen.
 func (gr *SquareGrid) Draw(target *ebiten.Image, scale float32) {
-	xscale := scale / 2
-	yscale := scale / 2
+	xscale := gr.scale * scale / 2
+	yscale := gr.scale * scale / 2
 	op := &ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
 	var offset int
 	gr.Iterate(func(generic Grid, l ILoc, n int, c *Cell) {
