@@ -1,7 +1,6 @@
 package g_test
 
 import (
-	"math/rand"
 	"testing"
 
 	"seebs.net/modus/g"
@@ -9,12 +8,30 @@ import (
 
 func BenchmarkParticleOp(b *testing.B) {
 	c := g.NewContext(1280, 960, false)
-	ps := c.NewParticles(20, 1, g.Palettes["rainbow"])
-	for i := 0; i < b.N; i++ {
-		p := ps.Add(g.SecondSplasher, 0, 230, 240)
-		p.Delay = int(rand.Int31n(25))
+	params := g.ParticleParams{
+		State: g.ParticleState{
+			ParticlePos: g.ParticlePos{X: 23, Y: 23, Theta: 1},
+		},
+		Delta: g.ParticlePos{
+			X:     1,
+			Y:     1,
+			Theta: 1,
+		},
+		Delay: 3,
 	}
-	for !ps.Tick() {
-		// do nothing
+	for i := 0; i < b.N; i++ {
+		m := &g.MovingParticles{}
+		ps := c.NewParticleSystem(20, 1, g.Palettes["rainbow"], m)
+		ps.Anim, _ = m.Animation("splasher", 30)
+		for j := 0; j < 10000; j++ {
+			params.Delay = (params.Delay + 1) & 7
+			err := ps.Add(params)
+			if err != nil {
+				b.Fatalf("unexpected error adding particle: %v", err)
+			}
+		}
+		for !ps.Tick() {
+			// do nothing
+		}
 	}
 }

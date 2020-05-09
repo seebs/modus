@@ -62,7 +62,7 @@ type match3Scene struct {
 	cycle        int
 	mode         match3Mode
 	explode      bool
-	splashy      *g.Particles
+	splashy      *g.ParticleSystem
 	toneOffset   int
 	particleShim g.Affine
 }
@@ -331,29 +331,39 @@ func (s *match3Scene) Tick(voice *sound.Voice, km keys.Map) (bool, error) {
 				s.nextMatch = (s.nextMatch + 1) % 6
 			}
 		}
-		s.splashy = s.gctx.NewParticles(s.gr.Width*4, 1, s.palette)
+		moving := &g.MovingParticles{}
+		s.splashy = s.gctx.NewParticleSystem(s.gr.Width*4, 1, s.palette, moving)
+		anim, err := moving.Animation("splasher", 30)
+		if err == nil {
+			s.splashy.Anim = anim
+		}
 		for _, c := range s.fading {
 			x0, y0 := s.particleShim.Project(s.gr.CenterFor(c.ILoc.Y, c.ILoc.X))
 			// add a particle animation for each c
+			params := g.ParticleParams{
+				State: g.ParticleState{
+					P:     c.P,
+					Scale: rand.Float32()/2 + 0.5,
+				},
+			}
 			for i := 0; i < 5; i++ {
-				p := s.splashy.Add(g.SecondSplasher, c.P, x0, y0)
-				p.Alpha = 0
-				p.Scale = rand.Float32()/2 + 0.5
-				p.Delay = int(rand.Int31n(6))
-				p.X = (rand.Float32() - 0.5) / 2
-				p.Y = (rand.Float32() - 0.5) / 2
-				p.DX = (rand.Float32() - 0.5) / 4
-				p.DY = (rand.Float32() - 0.5) / 4
+				params.State.X = x0 + (rand.Float32()-0.5)/24
+				params.State.Y = y0 + (rand.Float32()-0.5)/24
+				params.Delta.X = (rand.Float32() - 0.5) / 4
+				params.Delta.Y = (rand.Float32() - 0.5) / 4
+				params.State.Scale = rand.Float32()/2 + 0.5
+				params.Delay = int(rand.Int31n(6))
+				_ = s.splashy.Add(params)
 			}
 			for i := 0; i < 3; i++ {
-				p := s.splashy.Add(g.SecondSplasher, c.P+g.Paint(rand.Int31n(5))+1, x0, y0)
-				p.Alpha = 0
-				p.Scale = rand.Float32()/2 + 0.5
-				p.Delay = int(rand.Int31n(6))
-				p.X = (rand.Float32() - 0.5) / 2
-				p.Y = (rand.Float32() - 0.5) / 2
-				p.DX = (rand.Float32() - 0.5) / 4
-				p.DY = (rand.Float32() - 0.5) / 4
+				params.State.X = x0 + (rand.Float32()-0.5)/24
+				params.State.Y = y0 + (rand.Float32()-0.5)/24
+				params.Delta.X = (rand.Float32() - 0.5) / 4
+				params.Delta.Y = (rand.Float32() - 0.5) / 4
+				params.State.Scale = rand.Float32()/2 + 0.5
+				params.Delay = int(rand.Int31n(6))
+				params.State.P = c.P + g.Paint(rand.Int31n(5)) + 1
+				_ = s.splashy.Add(params)
 			}
 		}
 	}

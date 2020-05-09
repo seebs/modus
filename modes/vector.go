@@ -134,25 +134,34 @@ func simpleDemo(s *vectorScene, km keys.Map) string {
 		if km.Down(ebiten.KeyW, ebiten.KeyUp) {
 			b.pt.Velocity.X += cos * .0001
 			b.pt.Velocity.Y += sin * .0001
-			p := s.pt.Add(g.SecondSplasher, g.Paint(b.pOffset+1), -0.01, 0)
-			p.Alpha = 0
-			p.Scale = rand.Float32()/16 + 0.125
-			p.DX = -(0.0625 + (rand.Float32() / 8))
-			p.DY = (rand.Float32() - 0.5) / 8
-			if math.Abs(p.DY) > 0.05 {
-				awayFrom05 := math.Abs(p.DY) - 0.05
+			dx := -(0.0625 + (rand.Float32() / 8))
+			dy := (rand.Float32() - 0.5) / 8
+			aDy := math.Abs(dy)
+			paint := g.Paint(b.pOffset + 1)
+			if aDy > 0.05 {
+				awayFrom05 := aDy - 0.05
 				// gets us a range of about 0 to 0.0125, which we want to convert to about 1 palette's
 				// worth of shift
-				p.P = s.palette.Inc(p.P, -int(awayFrom05*80*weaveInterpolate))
+				paint = s.palette.Inc(paint, -int(awayFrom05*80*weaveInterpolate))
 			}
-			if math.Abs(p.DY) < 0.01 {
+			if aDy < 0.01 {
 				// exactly 0.01: we get 0.01
 				// exactly 0: we get 0.02
 				// multiplying by 75 gets us a range from .75 to 1.5, so "around 1" palette's worth of shift
-				awayFrom01 := 0.02 - math.Abs(p.DY)
-				p.P = s.palette.Inc(p.P, int(awayFrom01*100*weaveInterpolate))
+				awayFrom01 := 0.02 - aDy
+				paint = s.palette.Inc(paint, int(awayFrom01*100*weaveInterpolate))
 			}
-			p.DTheta = p.DY * 2
+			dTheta := dy * 2
+			params := g.ParticleParams{
+				State: g.ParticleState{
+					ParticlePos: g.ParticlePos{X: -0.01},
+					P:           paint,
+					Scale:       rand.Float32()/16 + 0.125,
+				},
+				Delta: g.ParticlePos{X: dx, Y: dy, Theta: dTheta},
+			}
+			_ = s.pt.Add(params)
+
 		}
 		if km.Down(ebiten.KeyA, ebiten.KeyLeft) {
 			b.ship.Theta -= .05
@@ -185,7 +194,7 @@ type vectorScene struct {
 	gctx      *g.Context
 	mode      vectorMode
 	wv        *g.Weave
-	pt        *g.Particles
+	pt        *g.ParticleSystem
 	tx        *g.Text
 	detail    int
 	cycle     int
@@ -234,8 +243,12 @@ func (s *vectorScene) Reset(detail int, p *g.Palette) error {
 
 func (s *vectorScene) Display() error {
 	s.wv = s.gctx.NewWeave(16, s.palette)
-	s.pt = s.gctx.NewParticles(16, 1, s.palette)
-	var err error
+	moving := &g.MovingParticles{}
+	s.pt = s.gctx.NewParticleSystem(16, 1, s.palette, moving)
+	anim, err := moving.Animation("splasher", 30)
+	if err == nil {
+		s.pt.Anim = anim
+	}
 	s.tx, err = s.gctx.NewText("arcade", 24, s.palette)
 	if s.mode.computeInit != nil {
 		s.mode.computeInit(s)
