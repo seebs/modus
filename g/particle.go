@@ -9,6 +9,11 @@ import (
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 )
 
+// The need for the []*Particle, and for Particle to be large even when
+// a specific implementation could be small, is a flaw. To fix it, we really
+// need to have a couple of implementations of differing complexity, or
+// something like that, I think?
+
 type Particles struct {
 	X, Y                    float32
 	DX, DY                  float32
@@ -43,21 +48,38 @@ func (ps *Particles) Add(anim ParticleAnimation, p Paint, X0, Y0 float32) *Parti
 	ps.indices = append(ps.indices,
 		offset+0, offset+1, offset+2,
 		offset+2, offset+1, offset+3)
+	// return &ps.particles[len(ps.particles)-1]
 	return np
+}
+
+func (ps *Particles) Count() int {
+	return len(ps.particles)
 }
 
 // Tick returns true when it's done, at which point the emitter is probably done.
 func (ps *Particles) Tick() bool {
-	j := 0
-	for _, p := range ps.particles {
-		if !p.Anim.Tick(p) {
-			ps.particles[j] = p
-			j++
+	found := 0
+	for i := range ps.particles {
+		p := ps.particles[i]
+		if p.Anim != nil {
+			found++
+			if p.Anim.Tick(p) {
+				p.Anim = nil
+			}
 		}
 	}
-	ps.particles = ps.particles[:j]
+	if found > 0 && found*2 <= len(ps.particles) {
+		j := 0
+		for i := range ps.particles {
+			if ps.particles[i].Anim != nil {
+				ps.particles[j] = ps.particles[i]
+				j++
+			}
+		}
+		ps.particles = ps.particles[:j]
+	}
 	ps.X, ps.Y = ps.X+ps.DX, ps.Y+ps.DY
-	return len(ps.particles) == 0
+	return found == 0
 }
 
 func (ps *Particles) Draw(target *ebiten.Image, scale float32) {
@@ -156,3 +178,4 @@ func (s Splasher) Tick(p *Particle) bool {
 }
 
 var SecondSplasher = Splasher{duration: 30}
+var LongSplasher = Splasher{duration: 150}
