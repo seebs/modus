@@ -129,11 +129,14 @@ func (ps *ParticleSystem) ProjectWithDelta(x0, y0 float32, dx, dy float32) (x1, 
 func (ps *ParticleSystem) Draw(target *ebiten.Image, scale float32) {
 	opt := ebiten.DrawTrianglesOptions{CompositeMode: ebiten.CompositeModeLighter}
 	offset := 0
-	r := dotData.vsByR[ps.r]
+	// r := dotData.vsByR[ps.r]
 	thickness := ps.Size * dotData.scales[ps.r]
 	states := ps.particles.Drawable()
 	for i := range states {
 		p := &states[i]
+		if p.Alpha == 0 || p.Scale == 0 {
+			continue
+		}
 		vs := ps.vertices[offset : offset+4]
 		x, y := p.X, p.Y
 		size := thickness * p.Scale
@@ -165,10 +168,10 @@ func (ps *ParticleSystem) Draw(target *ebiten.Image, scale float32) {
 		vs[1].DstX, vs[1].DstY = (x+cos+sin)*scale, (y+sin-cos)*scale
 		vs[2].DstX, vs[2].DstY = (x-cos-sin)*scale, (y-sin+cos)*scale
 		vs[3].DstX, vs[3].DstY = (x+cos-sin)*scale, (y+sin+cos)*scale
-		vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
-		vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
-		vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
-		vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
+		// vs[0].SrcX, vs[0].SrcY = r[0].SrcX, r[0].SrcY
+		// vs[1].SrcX, vs[1].SrcY = r[1].SrcX, r[1].SrcY
+		// vs[2].SrcX, vs[2].SrcY = r[2].SrcX, r[2].SrcY
+		// vs[3].SrcX, vs[3].SrcY = r[3].SrcX, r[3].SrcY
 		r, g, b, _ := ps.palette.Float32(p.P)
 		vs[0].ColorR, vs[0].ColorG, vs[0].ColorB, vs[0].ColorA = r, g, b, p.Alpha
 		vs[1].ColorR, vs[1].ColorG, vs[1].ColorB, vs[1].ColorA = r, g, b, p.Alpha
@@ -177,7 +180,7 @@ func (ps *ParticleSystem) Draw(target *ebiten.Image, scale float32) {
 		offset += 4
 	}
 	if target != nil {
-		target.DrawTriangles(ps.vertices, ps.indices[:len(states)*6], dotData.img, &opt)
+		target.DrawTriangles(ps.vertices, ps.indices[:(offset/4)*6], dotData.img, &opt)
 		ebitenutil.DebugPrint(target, ps.status)
 	}
 }
