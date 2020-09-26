@@ -60,7 +60,7 @@ func gravityDetail(base int) int {
 func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 	cshift := s.t0 / 256
 	factor := float32(w*h) * 5000
-	gScaleMod := 0.1 + s.pulse
+	gScaleMod := float32(0.1) + s.pulse
 	computed := 0
 	t := (s.t0 / 60)
 	s.cx, s.cy = math.Sincos(t)
@@ -72,6 +72,7 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 	cx[1], cy[1] = s.cy, -s.cx
 	cx[2], cy[2] = -s.cx, -s.cy
 	cx[3], cy[3] = -s.cy, s.cx
+
 	var cIdx int
 	rowCount := 0
 	row := 0
@@ -81,7 +82,7 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 			row++
 			rowCount = 0
 		}
-		cIdx = ((row & 1) << 1) ^ (rowCount & 1)
+		cIdx = ((row & 1) ^ (rowCount & 1)) << 1
 		var myCx, myCy float32
 		px, py := prev.Locs[idx].X, prev.Locs[idx].Y
 		pSub := prev.Locs[:idx]
@@ -105,20 +106,26 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		myCx, myCy = cx[cIdx], cy[cIdx]
 		dx, dy := px-myCx, py-myCy
 		dist2 := dx*dx + dy*dy
-		speed := math.Sqrt(bDX*bDX + bDY*bDY)
-		// damping factor: push towards center of screen
-		bDX -= dx / 10000
-		bDY -= dy / 10000
-		next.Locs[idx].X = px + bDX
-		next.Locs[idx].Y = py + bDY
-		// made it quite a ways off screen... move to your center and emit
 		if dist2 > 4 {
-			dirx, diry := cx[(cIdx + 2) & 3], cy[(cIdx + 2) & 3]
+			// made it quite a ways off screen... move to your center and emit
+			dirx, diry := cx[(cIdx+2)&3], cy[(cIdx+2)&3]
 			bDX = (bDX * 0.05) + (dirx * .05)
 			bDY = (bDY * 0.05) + (diry * .05)
+			// next.Locs[idx].X = myCx
+			// next.Locs[idx].Y = myCy
 			next.Locs[idx].X = myCx
 			next.Locs[idx].Y = myCy
+		} else {
+			// damping factor: push towards center of screen
+			bDX -= dx / 10000
+			bDY -= dy / 10000
+			next.Locs[idx].X = px + bDX
+			next.Locs[idx].Y = py + bDY
 		}
+		// compute speed here because either of the above could have
+		// changed it.
+		speed := math.Sqrt(bDX*bDX + bDY*bDY)
+
 		sinv := 1 - (speed * 30)
 		if sinv < 0.05 {
 			sinv = 0.05
@@ -129,8 +136,9 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		next.S[idx] = sinv
 		base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
 	}
-	return fmt.Sprintf("%d computed. [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
+	return fmt.Sprintf("%d computed. pulse %.3f, [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
 		computed,
+		s.pulse,
 		base.Vecs[0].X, base.Vecs[0].Y,
 		prev.Locs[0].X, prev.Locs[0].Y,
 		next.Locs[0].X, next.Locs[0].Y)
