@@ -145,78 +145,6 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		next.Locs[0].X, next.Locs[0].Y)
 }
 
-// gravityBatchPartial uses the previous locations of "us" and "them" to update
-// the vectors for "us" and "them" based on the effects of gravity, for batches
-// of 8x8 at a time. It applies these operations only to things where the
-// second coordinate is smaller -- this is used when the indexes are the same
-// and handles the end of a row of 8x8 things.
-func gravityBatchPartial(usLocs []g.FLoc, usVecs []g.FVec, gScaleMod, factor float32) {
-	usLocs = usLocs[:8]
-	usVecs = usVecs[:8]
-	for i := range usLocs {
-		px, py := usLocs[i].X, usLocs[i].Y
-		bDX, bDY := usVecs[i].X, usVecs[i].Y
-		for j := range usLocs[:i] {
-			dx, dy := usLocs[j].X-px, usLocs[j].Y-py
-			gscale := dx*dx + dy*dy
-			if gscale < 0.01 {
-				gscale = 0.01
-			}
-			gscale = 1 / ((gscale + gScaleMod) * factor)
-			dx, dy = dx*gscale, dy*gscale
-			bDX += dx
-			bDY += dy
-			usVecs[j].X -= dx
-			usVecs[j].Y -= dy
-		}
-		usVecs[i].X, usVecs[i].Y = bDX, bDY
-	}
-}
-
-// gravityBatchFull uses the previous locations of "us" and "them" to update
-// the vectors for "us" and "them" based on the effects of gravity, for batches
-// of 8x8 at a time. It applies these operations to all the combinations,
-// and is used when all the "them" coordinates are actually smaller by some
-// positive multiple of 8.
-func gravityBatchFull(usLocs, themLocs []g.FLoc, usVecs, themVecs []g.FVec, gScaleMod, factor float32) {
-	usLocs = usLocs[:8]
-	themLocs = themLocs[:8]
-	usVecs = usVecs[:8]
-	themVecs = themVecs[:8]
-	for i := range usLocs {
-		px, py := usLocs[i].X, usLocs[i].Y
-		bDX, bDY := usVecs[i].X, usVecs[i].Y
-		for j := range themLocs {
-			dx, dy := themLocs[j].X-px, themLocs[j].Y-py
-			gscale := dx*dx + dy*dy
-			if gscale < 0.01 {
-				gscale = 0.01
-			}
-			gscale = 1 / ((gscale + gScaleMod) * factor)
-			dx, dy = dx*gscale, dy*gscale
-			bDX += dx
-			bDY += dy
-			themVecs[j].X -= dx
-			themVecs[j].Y -= dy
-		}
-		usVecs[i].X, usVecs[i].Y = bDX, bDY
-	}
-}
-
-func gravityComputeOne(px, py, bDX, bDY, ljX, ljY, vjX, vjY *float32, gScaleMod, factor float32) {
-	dx, dy := *ljX-*px, *ljY-*py
-	gscale := dx*dx + dy*dy
-	if gscale < 0.01 {
-		gscale = 0.01
-	}
-	gscale = (gscale + gScaleMod) * factor
-	dx, dy = dx/gscale, dy/gscale
-	*bDX += dx
-	*bDY += dy
-	*vjX -= dx
-	*vjY -= dy
-}
-
 // let's do... gravity!
 func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
 	if len(base.Locs)&7 != 0 {
@@ -243,14 +171,48 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 		usLocs := prev.Locs[baseIdx : baseIdx+8]
 		usVecs := base.Vecs[baseIdx : baseIdx+8]
 		// do the partial count for the edges
-		gravityBatchPartial(usLocs, usVecs, gScaleMod, factor)
+		for i := range usLocs {
+			px, py := usLocs[i].X, usLocs[i].Y
+			bDX, bDY := usVecs[i].X, usVecs[i].Y
+			for j := range usLocs[:i] {
+				dx, dy := usLocs[j].X-px, usLocs[j].Y-py
+				gscale := dx*dx + dy*dy
+				if gscale < 0.01 {
+					gscale = 0.01
+				}
+				gscale = 1 / ((gscale + gScaleMod) * factor)
+				dx, dy = dx*gscale, dy*gscale
+				bDX += dx
+				bDY += dy
+				usVecs[j].X -= dx
+				usVecs[j].Y -= dy
+			}
+			usVecs[i].X, usVecs[i].Y = bDX, bDY
+		}
 		computed += 28
 		for kidx := baseIdx - 8; kidx >= 0; kidx -= 8 {
 			// themLocs := (*[8]g.FLoc)(unsafe.Pointer(&prev.Locs[kidx]))
 			// themVecs := (*[8]g.FVec)(unsafe.Pointer(&base.Vecs[kidx]))
 			themLocs := prev.Locs[kidx : kidx+8]
 			themVecs := base.Vecs[kidx : kidx+8]
-			gravityBatchFull(usLocs, themLocs, usVecs, themVecs, gScaleMod, factor)
+			for i := range usLocs {
+				px, py := usLocs[i].X, usLocs[i].Y
+				bDX, bDY := usVecs[i].X, usVecs[i].Y
+				for j := range themLocs {
+					dx, dy := themLocs[j].X-px, themLocs[j].Y-py
+					gscale := dx*dx + dy*dy
+					if gscale < 0.01 {
+						gscale = 0.01
+					}
+					gscale = 1 / ((gscale + gScaleMod) * factor)
+					dx, dy = dx*gscale, dy*gscale
+					bDX += dx
+					bDY += dy
+					themVecs[j].X -= dx
+					themVecs[j].Y -= dy
+				}
+				usVecs[i].X, usVecs[i].Y = bDX, bDY
+			}
 			computed += 64
 		}
 		// now handle the location computations for these 8 items,
