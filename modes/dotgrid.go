@@ -25,6 +25,7 @@ const dotGridCycleTime = 1
 
 var dotGridModes = []dotGridMode{
 	{name: "gravity", depth: 8, cycleTime: dotGridCycleTime, compute: gravityCompute, computeInit: gravityComputeInit, detail: gravityDetail},
+	{name: "gravityBatch", depth: 8, cycleTime: dotGridCycleTime, compute: gravityComputeBatch, computeInit: gravityComputeInit, detail: gravityDetail},
 	{name: "distance", depth: 8, cycleTime: dotGridCycleTime, compute: distanceCompute},
 	{name: "boring", depth: 8, cycleTime: dotGridCycleTime, compute: boringCompute},
 	{name: "reallyBoring", depth: 8, cycleTime: dotGridCycleTime, compute: reallyBoringCompute},
@@ -94,8 +95,8 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 			if gscale < 0.01 {
 				gscale = 0.01
 			}
-			gscale = (gscale + gScaleMod) * factor
-			dx, dy = dx/gscale, dy/gscale
+			gscale = 1 / ((gscale + gScaleMod) * factor)
+			dx, dy = dx*gscale, dy*gscale
 			bDX += dx
 			bDY += dy
 			bSub[kidx].X -= dx
@@ -135,6 +136,171 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		next.A[idx] = 1
 		next.S[idx] = sinv
 		base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
+	}
+	return fmt.Sprintf("%d computed. pulse %.3f, [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
+		computed,
+		s.pulse,
+		base.Vecs[0].X, base.Vecs[0].Y,
+		prev.Locs[0].X, prev.Locs[0].Y,
+		next.Locs[0].X, next.Locs[0].Y)
+}
+
+// gravityBatchPartial uses the previous locations of "us" and "them" to update
+// the vectors for "us" and "them" based on the effects of gravity, for batches
+// of 8x8 at a time. It applies these operations only to things where the
+// second coordinate is smaller -- this is used when the indexes are the same
+// and handles the end of a row of 8x8 things.
+func gravityBatchPartial(usLocs []g.FLoc, usVecs []g.FVec, gScaleMod, factor float32) {
+	usLocs = usLocs[:8]
+	usVecs = usVecs[:8]
+	for i := range usLocs {
+		px, py := usLocs[i].X, usLocs[i].Y
+		bDX, bDY := usVecs[i].X, usVecs[i].Y
+		for j := range usLocs[:i] {
+			dx, dy := usLocs[j].X-px, usLocs[j].Y-py
+			gscale := dx*dx + dy*dy
+			if gscale < 0.01 {
+				gscale = 0.01
+			}
+			gscale = 1 / ((gscale + gScaleMod) * factor)
+			dx, dy = dx*gscale, dy*gscale
+			bDX += dx
+			bDY += dy
+			usVecs[j].X -= dx
+			usVecs[j].Y -= dy
+		}
+		usVecs[i].X, usVecs[i].Y = bDX, bDY
+	}
+}
+
+// gravityBatchFull uses the previous locations of "us" and "them" to update
+// the vectors for "us" and "them" based on the effects of gravity, for batches
+// of 8x8 at a time. It applies these operations to all the combinations,
+// and is used when all the "them" coordinates are actually smaller by some
+// positive multiple of 8.
+func gravityBatchFull(usLocs, themLocs []g.FLoc, usVecs, themVecs []g.FVec, gScaleMod, factor float32) {
+	usLocs = usLocs[:8]
+	themLocs = themLocs[:8]
+	usVecs = usVecs[:8]
+	themVecs = themVecs[:8]
+	for i := range usLocs {
+		px, py := usLocs[i].X, usLocs[i].Y
+		bDX, bDY := usVecs[i].X, usVecs[i].Y
+		for j := range themLocs {
+			dx, dy := themLocs[j].X-px, themLocs[j].Y-py
+			gscale := dx*dx + dy*dy
+			if gscale < 0.01 {
+				gscale = 0.01
+			}
+			gscale = 1 / ((gscale + gScaleMod) * factor)
+			dx, dy = dx*gscale, dy*gscale
+			bDX += dx
+			bDY += dy
+			themVecs[j].X -= dx
+			themVecs[j].Y -= dy
+		}
+		usVecs[i].X, usVecs[i].Y = bDX, bDY
+	}
+}
+
+func gravityComputeOne(px, py, bDX, bDY, ljX, ljY, vjX, vjY *float32, gScaleMod, factor float32) {
+	dx, dy := *ljX-*px, *ljY-*py
+	gscale := dx*dx + dy*dy
+	if gscale < 0.01 {
+		gscale = 0.01
+	}
+	gscale = (gscale + gScaleMod) * factor
+	dx, dy = dx/gscale, dy/gscale
+	*bDX += dx
+	*bDY += dy
+	*vjX -= dx
+	*vjY -= dy
+}
+
+// let's do... gravity!
+func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
+	if len(base.Locs)&7 != 0 {
+		return fmt.Sprintf("FATAL: batch compute requires N be a multiple of 8, got %d", len(base.Locs))
+	}
+	cshift := s.t0 / 256
+	factor := float32(w*h) * 5000
+	gScaleMod := float32(0.1) + s.pulse
+	computed := 0
+	t := (s.t0 / 60)
+	s.cx, s.cy = math.Sincos(t)
+	s.cx /= 4
+	s.cy /= 4
+	cx := make([]float32, 4)
+	cy := make([]float32, 4)
+	cx[0], cy[0] = s.cx, s.cy
+	cx[1], cy[1] = s.cy, -s.cx
+	cx[2], cy[2] = -s.cx, -s.cy
+	cx[3], cy[3] = -s.cy, s.cx
+
+	rowCount := 0
+	row := 0
+	for baseIdx := len(base.Locs) - 8; baseIdx >= 0; baseIdx -= 8 {
+		usLocs := prev.Locs[baseIdx : baseIdx+8]
+		usVecs := base.Vecs[baseIdx : baseIdx+8]
+		// do the partial count for the edges
+		gravityBatchPartial(usLocs, usVecs, gScaleMod, factor)
+		computed += 28
+		for kidx := baseIdx - 8; kidx >= 0; kidx -= 8 {
+			// themLocs := (*[8]g.FLoc)(unsafe.Pointer(&prev.Locs[kidx]))
+			// themVecs := (*[8]g.FVec)(unsafe.Pointer(&base.Vecs[kidx]))
+			themLocs := prev.Locs[kidx : kidx+8]
+			themVecs := base.Vecs[kidx : kidx+8]
+			gravityBatchFull(usLocs, themLocs, usVecs, themVecs, gScaleMod, factor)
+			computed += 64
+		}
+		// now handle the location computations for these 8 items,
+		// which will be untouched by any future iterations of the outer loop.
+		for i := 7; i >= 0; i-- {
+			idx := i + baseIdx
+			rowCount++
+			if rowCount == w {
+				row++
+				rowCount = 0
+			}
+			cIdx := ((row & 1) ^ (rowCount & 1)) << 1
+			var myCx, myCy float32
+			px, py := prev.Locs[idx].X, prev.Locs[idx].Y
+			bDX, bDY := base.Vecs[idx].X, base.Vecs[idx].Y
+
+			// pull things towards nominal center
+			myCx, myCy = cx[cIdx], cy[cIdx]
+			dx, dy := px-myCx, py-myCy
+			dist2 := dx*dx + dy*dy
+			if dist2 > 4 {
+				// made it quite a ways off screen... move to your center and emit
+				dirx, diry := cx[(cIdx+2)&3], cy[(cIdx+2)&3]
+				bDX = (bDX * 0.05) + (dirx * .05)
+				bDY = (bDY * 0.05) + (diry * .05)
+				// next.Locs[idx].X = myCx
+				// next.Locs[idx].Y = myCy
+				next.Locs[idx].X = myCx
+				next.Locs[idx].Y = myCy
+			} else {
+				// damping factor: push towards center of screen
+				bDX -= dx / 10000
+				bDY -= dy / 10000
+				next.Locs[idx].X = px + bDX
+				next.Locs[idx].Y = py + bDY
+			}
+			// compute speed here because either of the above could have
+			// changed it.
+			speed := math.Sqrt(bDX*bDX + bDY*bDY)
+
+			sinv := 1 - (speed * 30)
+			if sinv < 0.05 {
+				sinv = 0.05
+			}
+
+			next.P[idx] = g.Paint(int(speed*900+cshift) - 10 + (18 * cIdx))
+			next.A[idx] = 1
+			next.S[idx] = sinv
+			base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
+		}
 	}
 	return fmt.Sprintf("%d computed. pulse %.3f, [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
 		computed,
