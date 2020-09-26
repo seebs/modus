@@ -167,23 +167,6 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 	for baseIdx := len(base.Locs) - 8; baseIdx >= 0; baseIdx -= 8 {
 		usLocs := prev.Locs[baseIdx : baseIdx+8]
 		usVecs := base.Vecs[baseIdx : baseIdx+8]
-		// do the partial count for the edges
-		for i := range usLocs {
-			px, py := usLocs[i].X, usLocs[i].Y
-			bDX, bDY := usVecs[i].X, usVecs[i].Y
-			for j := range usLocs[:i] {
-				dx, dy := usLocs[j].X-px, usLocs[j].Y-py
-				gscale := dx*dx + dy*dy
-				gscale = 1 / ((gscale + gScaleMod) * factor)
-				dx, dy = dx*gscale, dy*gscale
-				bDX += dx
-				bDY += dy
-				usVecs[j].X -= dx
-				usVecs[j].Y -= dy
-			}
-			usVecs[i].X, usVecs[i].Y = bDX, bDY
-		}
-		computed += 28
 		for kidx := baseIdx - 8; kidx >= 0; kidx -= 8 {
 			// themLocs := (*[8]g.FLoc)(unsafe.Pointer(&prev.Locs[kidx]))
 			// themVecs := (*[8]g.FVec)(unsafe.Pointer(&base.Vecs[kidx]))
@@ -206,9 +189,23 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			}
 			computed += 64
 		}
-		// now handle the location computations for these 8 items,
-		// which will be untouched by any future iterations of the outer loop.
+		// do the partial count for the edges
 		for i := 7; i >= 0; i-- {
+			px, py := usLocs[i].X, usLocs[i].Y
+			bDX, bDY := usVecs[i].X, usVecs[i].Y
+			for j := range usLocs[:i] {
+				dx, dy := usLocs[j].X-px, usLocs[j].Y-py
+				gscale := dx*dx + dy*dy
+				gscale = 1 / ((gscale + gScaleMod) * factor)
+				dx, dy = dx*gscale, dy*gscale
+				bDX += dx
+				bDY += dy
+				usVecs[j].X -= dx
+				usVecs[j].Y -= dy
+			}
+			// and now, since nothing else will interact with
+			// this item, we can go ahead and do location computations
+			// for it.
 			idx := i + baseIdx
 			rowCount++
 			if rowCount == w {
@@ -217,8 +214,6 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			}
 			cIdx := ((row & 1) ^ (rowCount & 1)) << 1
 			var myCx, myCy float32
-			px, py := prev.Locs[idx].X, prev.Locs[idx].Y
-			bDX, bDY := base.Vecs[idx].X, base.Vecs[idx].Y
 
 			// pull things towards nominal center
 			myCx, myCy = cx[cIdx], cy[cIdx]
@@ -252,8 +247,9 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			next.P[idx] = g.Paint(int(speed*900+cshift) - 10 + (18 * cIdx))
 			next.A[idx] = 1
 			next.S[idx] = sinv
-			base.Vecs[idx].X, base.Vecs[idx].Y = bDX, bDY
+			usVecs[i].X, usVecs[i].Y = bDX, bDY
 		}
+		computed += 28
 	}
 	return fmt.Sprintf("%d computed. pulse %.3f, [0][0]: dx/dy %.3f,%.3f, %.3f,%.3f -> %.3f,%.3f",
 		computed,
