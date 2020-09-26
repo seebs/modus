@@ -142,7 +142,7 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		next.Locs[0].X, next.Locs[0].Y)
 }
 
-const batchSize = 8
+const batchSize = 16
 
 // let's do... gravity!
 func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGridState, next g.DotGridState) string {
