@@ -67,38 +67,28 @@ func dotSetup() {
 	textureSetup()
 }
 
-func makeDotGridHeight(w int, sx, sy float32) (int, int, int, int, float32) {
-	var h int
-	var major, minor *int
-	var scale float32
-	for {
-		if sx > sy {
-			scale = math.Floor(sx / float32(w))
-			h = int(math.Floor(sy / scale))
-		} else {
-			// compute sizes for portrait mode, then flip x and y
-			scale = math.Floor(sy / float32(w))
-			h = int(math.Floor(sx / scale))
+func makeDotGridHeight(wInitial int, sx, sy float32) (w, h, retMajor, retMinor int, scale float32) {
+	if sx < sy {
+		sx, sy = sy, sx
+		// flip results
+		defer func() {
 			w, h = h, w
-		}
-		if w > h {
-			major = &w
-			minor = &h
-		} else {
-			major = &h
-			minor = &w
-		}
-		if (*major)*(*major)*6 < ebiten.MaxIndicesNum {
+		}()
+	}
+	// coerce w to be a multiple of 4, so w*w will be a multiple of 16,
+	// which also makes w*w a multiple of 8, so I can do fancy clever
+	// stuff to optimize memory locality.
+	w = wInitial &^ 3
+	for {
+		scale = math.Floor(sx / float32(w))
+		h = int(math.Floor(sy / scale))
+		if w*w*6 < ebiten.MaxIndicesNum {
 			break
 		}
-		if w < 8 {
-			h--
-		} else {
-			w--
-		}
+		w -= 4
 	}
-	// fmt.Printf("%dx%d (size %d) [%d indices], grid scale %f\n", w, h, *major, (*major)*(*major)*6, scale*2)
-	return w, h, *major, *minor, scale * 2
+	// fmt.Printf("%dx%d (size %d) [%d indices], grid scale %f\n", w, h, w, w*w*6, scale*2)
+	return w, h, w, h, scale * 2
 }
 
 // NewPolyLine creates a new PolyLine using the specified sprite and palette.
