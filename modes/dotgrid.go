@@ -92,9 +92,6 @@ func gravityCompute(w, h int, s *dotGridScene, base g.DotGridBase, prev g.DotGri
 		for kidx := range pSub {
 			dx, dy := pSub[kidx].X-px, pSub[kidx].Y-py
 			gscale := dx*dx + dy*dy
-			if gscale < 0.01 {
-				gscale = 0.01
-			}
 			gscale = 1 / ((gscale + gScaleMod) * factor)
 			dx, dy = dx*gscale, dy*gscale
 			bDX += dx
@@ -177,9 +174,6 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			for j := range usLocs[:i] {
 				dx, dy := usLocs[j].X-px, usLocs[j].Y-py
 				gscale := dx*dx + dy*dy
-				if gscale < 0.01 {
-					gscale = 0.01
-				}
 				gscale = 1 / ((gscale + gScaleMod) * factor)
 				dx, dy = dx*gscale, dy*gscale
 				bDX += dx
@@ -201,9 +195,6 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 				for j := range themLocs {
 					dx, dy := themLocs[j].X-px, themLocs[j].Y-py
 					gscale := dx*dx + dy*dy
-					if gscale < 0.01 {
-						gscale = 0.01
-					}
 					gscale = 1 / ((gscale + gScaleMod) * factor)
 					dx, dy = dx*gscale, dy*gscale
 					bDX += dx
