@@ -150,19 +150,15 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 		return fmt.Sprintf("FATAL: batch compute requires N be a multiple of 8, got %d", len(base.Locs))
 	}
 	cshift := s.t0 / 256
-	factor := float32(w*h) * 5000
+	factor := 1 / (float32(w*h) * 5000)
 	gScaleMod := float32(0.1) + s.pulse
 	computed := 0
 	t := (s.t0 / 60)
 	s.cx, s.cy = math.Sincos(t)
 	s.cx /= 4
 	s.cy /= 4
-	cx := make([]float32, 4)
-	cy := make([]float32, 4)
-	cx[0], cy[0] = s.cx, s.cy
-	cx[1], cy[1] = s.cy, -s.cx
-	cx[2], cy[2] = -s.cx, -s.cy
-	cx[3], cy[3] = -s.cy, s.cx
+	cx := [4]float32{s.cx, s.cy, -s.cx, -s.cy}
+	cy := [4]float32{s.cy, -s.cx, -s.cy, s.cx}
 
 	rowCount := 0
 	row := 0
@@ -178,7 +174,7 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 				for j := range themLocs {
 					dx, dy := themLocs[j].X-px, themLocs[j].Y-py
 					gscale := dx*dx + dy*dy
-					gscale = 1 / ((gscale + gScaleMod) * factor)
+					gscale = (gscale + gScaleMod) * factor
 					dx, dy = dx*gscale, dy*gscale
 					bDX += dx
 					bDY += dy
@@ -198,7 +194,7 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			for j := range usLocs[:i] {
 				dx, dy := usLocs[j].X-px, usLocs[j].Y-py
 				gscale := dx*dx + dy*dy
-				gscale = 1 / ((gscale + gScaleMod) * factor)
+				gscale = (gscale + gScaleMod) * factor
 				dx, dy = dx*gscale, dy*gscale
 				bDX += dx
 				bDY += dy
@@ -214,7 +210,7 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 				row++
 				rowCount = 0
 			}
-			cIdx := ((row & 1) ^ (rowCount & 1)) << 1
+			cIdx := ((row ^ rowCount) & 1) << 1
 			var myCx, myCy float32
 
 			// pull things towards nominal center
@@ -224,8 +220,8 @@ func gravityComputeBatch(w, h int, s *dotGridScene, base g.DotGridBase, prev g.D
 			if dist2 > 4 {
 				// made it quite a ways off screen... move to your center and emit
 				dirx, diry := cx[(cIdx+2)&3], cy[(cIdx+2)&3]
-				bDX = (bDX * 0.05) + (dirx * .05)
-				bDY = (bDY * 0.05) + (diry * .05)
+				bDX = (bDX + dirx) * 0.05
+				bDY = (bDY + diry) * 0.05
 				// next.Locs[idx].X = myCx
 				// next.Locs[idx].Y = myCy
 				next.Locs[idx].X = myCx
